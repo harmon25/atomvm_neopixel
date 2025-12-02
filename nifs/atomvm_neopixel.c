@@ -19,7 +19,12 @@
 
 #include <atomvm_neopixel.h>
 #include <context.h>
+#include <sdkconfig.h>
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include <driver/rmt_tx.h>
+#else
 #include <driver/rmt.h>
+#endif
 #include <defaultatoms.h>
 #include <esp_log.h>
 #include <esp32_sys.h>
@@ -44,6 +49,26 @@ static const char *const channel_2_atom       = "\x9"  "channel_2";
 static const char *const channel_3_atom       = "\x9"  "channel_3";
 //                                                      123456789ABCDEF01
 
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
+static rmt_channel_t get_rmt_channel(Context *ctx, term channel)
+{
+    if (channel == globalcontext_make_atom(ctx->global, channel_0_atom)) {
+        return RMT_CHANNEL_0;
+    } else if (channel == globalcontext_make_atom(ctx->global, channel_1_atom)) {
+        return RMT_CHANNEL_1;
+    } else if (channel == globalcontext_make_atom(ctx->global, channel_2_atom)) {
+        return RMT_CHANNEL_2;
+    } else if (channel == globalcontext_make_atom(ctx->global, channel_3_atom)) {
+        return RMT_CHANNEL_3;
+#if SOC_RMT_CHANNELS_PER_GROUP > 4
+    // TODO
+#endif
+    } else {
+        return RMT_CHANNEL_MAX;
+    }
+}
+#endif
+
 
 static inline term ptr_to_binary(void *ptr, Context* ctx)
 {
@@ -61,25 +86,6 @@ static inline void *binary_to_ptr(term binary)
 }
 
 
-static rmt_channel_t get_rmt_channel(Context *ctx, term channel)
-{
-    if (channel == globalcontext_make_atom(ctx->global, channel_0_atom)) {
-        return RMT_CHANNEL_1;
-    } else if (channel == globalcontext_make_atom(ctx->global, channel_1_atom)) {
-        return RMT_CHANNEL_2;
-    } else if (channel == globalcontext_make_atom(ctx->global, channel_2_atom)) {
-        return RMT_CHANNEL_2;
-    } else if (channel == globalcontext_make_atom(ctx->global, channel_3_atom)) {
-        return RMT_CHANNEL_3;
-#if SOC_RMT_CHANNELS_PER_GROUP > 4
-    // TODO
-#endif
-    } else {
-        return RMT_CHANNEL_MAX;
-    }
-}
-
-
 static term nif_init(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -91,6 +97,28 @@ static term nif_init(Context *ctx, int argc, term argv[])
     term channel = argv[2];
     VALIDATE_VALUE(channel, term_is_atom);
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    // ESP-IDF 5.x: RMT configuration is handled inside led_strip_new_rmt_ws2812
+    if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    } else {
+        led_strip_config_t strip_config = {
+            .max_leds = term_to_int(num_pixels),
+            .gpio_num = term_to_int(pin)
+        };
+        led_strip_t *strip = led_strip_new_rmt_ws2812(&strip_config);
+        if (!strip) {
+            TRACE("Failed to install WS2812 driver.\n");
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, led_strip_atom));
+            return error_tuple;
+        }
+        ESP_LOGI(TAG, "Installed WS2812 driver.");
+        return ptr_to_binary(strip, ctx);
+    }
+#else
+    // ESP-IDF 4.x: Use legacy RMT API
     rmt_channel_t rmt_channel = get_rmt_channel(ctx, channel);
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
@@ -128,6 +156,7 @@ static term nif_init(Context *ctx, int argc, term argv[])
         ESP_LOGI(TAG, "Installed WS2812 driver.");
         return ptr_to_binary(strip, ctx);
     }
+#endif
 }
 
 
@@ -286,8 +315,11 @@ static term nif_tini(Context *ctx, int argc, term argv[])
         }
     }
 
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
+    // Only need to uninstall RMT driver for ESP-IDF 4.x
+    // For ESP-IDF 5.x, cleanup is handled in ws2812_del()
     rmt_channel_t rmt_channel = get_rmt_channel(ctx, channel);
-    err = rmt_driver_uninstall(term_to_int(rmt_channel));
+    err = rmt_driver_uninstall(rmt_channel);
     if (err != ESP_OK) {
         TRACE("Failed to uninstall rmt driver.  err=%i\n", err);
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
@@ -299,6 +331,7 @@ static term nif_tini(Context *ctx, int argc, term argv[])
             return error_tuple;
         }
     }
+#endif
     TRACE("LED strip niti'd\n");
     return OK_ATOM;
 }
