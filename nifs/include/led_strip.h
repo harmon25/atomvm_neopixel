@@ -13,8 +13,6 @@
 // limitations under the License.
 #pragma once
 
-#include "esp_idf_version.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,12 +24,6 @@ extern "C" {
 *
 */
 typedef struct led_strip_s led_strip_t;
-
-/**
-* @brief LED Strip Device Type
-*
-*/
-typedef void *led_strip_dev_t;
 
 /**
 * @brief Declare of LED Strip Type
@@ -101,30 +93,8 @@ struct led_strip_s {
 */
 typedef struct {
     uint32_t max_leds;   /*!< Maximum LEDs in a single strip */
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-    int gpio_num;        /*!< GPIO number for ESP-IDF 5.x */
-#else
-    led_strip_dev_t dev; /*!< LED strip device (e.g. RMT channel, PWM channel, etc) for ESP-IDF 4.x */
-#endif
+    int gpio_num;        /*!< GPIO number */
 } led_strip_config_t;
-
-/**
- * @brief Default configuration for LED strip
- *
- */
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-#define LED_STRIP_DEFAULT_CONFIG(number, gpio) \
-    {                                          \
-        .max_leds = number,                    \
-        .gpio_num = gpio,                      \
-    }
-#else
-#define LED_STRIP_DEFAULT_CONFIG(number, dev_hdl) \
-    {                                             \
-        .max_leds = number,                       \
-        .dev = dev_hdl,                           \
-    }
-#endif
 
 /**
 * @brief Install a new ws2812 driver (based on RMT peripheral)
