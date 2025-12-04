@@ -47,6 +47,24 @@ struct led_strip_s {
     esp_err_t (*set_pixel)(led_strip_t *strip, uint32_t index, uint32_t red, uint32_t green, uint32_t blue);
 
     /**
+    * @brief Set RGBW for a specific pixel (for RGBW strips like SK6812)
+    *
+    * @param strip: LED strip
+    * @param index: index of pixel to set
+    * @param red: red part of color
+    * @param green: green part of color
+    * @param blue: blue part of color
+    * @param white: white part of color
+    *
+    * @return
+    *      - ESP_OK: Set RGBW for a specific pixel successfully
+    *      - ESP_ERR_INVALID_ARG: Set RGBW failed because of invalid parameters
+    *      - ESP_ERR_NOT_SUPPORTED: Strip is not RGBW type
+    *      - ESP_FAIL: Set RGBW for a specific pixel failed because other error occurred
+    */
+    esp_err_t (*set_pixel_rgbw)(led_strip_t *strip, uint32_t index, uint32_t red, uint32_t green, uint32_t blue, uint32_t white);
+
+    /**
     * @brief Refresh memory colors to LEDs
     *
     * @param strip: LED strip
@@ -108,13 +126,22 @@ struct led_strip_s {
 };
 
 /**
+* @brief LED Strip Type (RGB vs RGBW)
+*/
+typedef enum {
+    LED_STRIP_RGB = 0,   /*!< RGB LEDs (WS2812, WS2812B) - 3 bytes per pixel */
+    LED_STRIP_RGBW = 1,  /*!< RGBW LEDs (SK6812) - 4 bytes per pixel */
+} led_strip_type_t;
+
+/**
 * @brief LED Strip Configuration Type
 *
 */
 typedef struct {
-    uint32_t max_leds;   /*!< Maximum LEDs in a single strip */
-    int gpio_num;        /*!< GPIO number */
-    uint8_t brightness;  /*!< Global brightness (0-255), default 255 */
+    uint32_t max_leds;        /*!< Maximum LEDs in a single strip */
+    int gpio_num;             /*!< GPIO number */
+    uint8_t brightness;       /*!< Global brightness (0-255), default 255 */
+    led_strip_type_t led_type; /*!< LED type (RGB or RGBW), default RGB */
 } led_strip_config_t;
 
 /**
