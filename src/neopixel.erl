@@ -38,8 +38,7 @@
 
 -type neopixel() :: term().
 -type pin() :: non_neg_integer().
--type options() :: [option()].
--type option() :: #{timeout => non_neg_integer(), channel => channel(), led_type => led_type()}.
+-type options() :: map() | proplists:proplist().
 -type channel() :: channel_0 | channel_1 | channel_2 | channel_3.
 -type led_type() :: rgb | rgbw.
 
@@ -80,7 +79,9 @@ start(Pin, NumPixels) ->
 %%-----------------------------------------------------------------------------
 -spec start(Pin::pin(), NumPixels::non_neg_integer(), Options::options()) -> {ok, neopixel()} | {error, Reason::term()}.
 start(Pin, NumPixels, Options) ->
-    gen_server:start(?MODULE, [Pin, NumPixels, validate_options(maps:merge(Options, ?DEFAULT_OPTIONS))], []).
+    NormalizedOpts = normalize_options(Options),
+    MergedOpts = maps:merge(?DEFAULT_OPTIONS, NormalizedOpts),
+    gen_server:start(?MODULE, [Pin, NumPixels, validate_options(MergedOpts)], []).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok
@@ -248,6 +249,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 %% internal operations
 %%
+
+%% @private
+%% @doc Convert options to map format, supporting both maps and proplists
+normalize_options(Options) when is_map(Options) ->
+    Options;
+normalize_options(Options) when is_list(Options) ->
+    maps:from_list(Options);
+normalize_options(_) ->
+    throw(badarg).
 
 %% @private
 validate_options(Options) ->
