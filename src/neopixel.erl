@@ -27,11 +27,11 @@
 -module(neopixel).
 
 -export([
-    start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_hsv/5, refresh/1,
+    start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_rgbw/6, set_pixel_hsv/5, refresh/1,
     set_brightness/2, get_brightness/1
 ]).
--export([nif_init/3, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_rgb/5, nif_tini/2,
-         nif_set_brightness/2, nif_get_brightness/1]). %% internal nif APIs
+-export([nif_init/4, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_rgb/5, 
+         nif_set_pixel_rgbw/6, nif_tini/2, nif_set_brightness/2, nif_get_brightness/1]). %% internal nif APIs
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -behaviour(gen_server).
@@ -39,8 +39,9 @@
 -type neopixel() :: term().
 -type pin() :: non_neg_integer().
 -type options() :: [option()].
--type option() :: #{timeout => non_neg_integer(), channel => channel()}.
+-type option() :: #{timeout => non_neg_integer(), channel => channel(), led_type => led_type()}.
 -type channel() :: channel_0 | channel_1 | channel_2 | channel_3.
+-type led_type() :: rgb | rgbw.
 
 -type color() :: 0..255.
 -type brightness() :: 0..255.
@@ -48,7 +49,7 @@
 -type saturation() :: 0..100.
 -type value() :: 0..100.
 
--define(DEFAULT_OPTIONS, #{timeout => 100, channel => channel_0}).
+-define(DEFAULT_OPTIONS, #{timeout => 100, channel => channel_0, led_type => rgb}).
 
 -record(state, {
     pin :: pin(),
@@ -132,6 +133,25 @@ set_pixel_rgb(_Neopixel, _I, _R, _G, _B) ->
 %%-----------------------------------------------------------------------------
 %% @param   Neopixel        Neopixel instance
 %% @param   I               pixel index (`0..NumPixels - 1')
+%% @param   R               Red value (`0..255')
+%% @param   G               Green value (`0..255')
+%% @param   B               Blue value (`0..255')
+%% @param   W               White value (`0..255')
+%% @returns ok | {error, Reason}
+%% @doc     Set a pixel value in the RGBW color space (for SK6812 RGBW strips).
+%%
+%% Returns `{error, not_supported}' if called on an RGB strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pixel_rgbw(Neopixel::neopixel(), I::non_neg_integer(), R::color(), G::color(), B::color(), W::color()) -> ok | {error, Reason::term()}.
+set_pixel_rgbw(Neopixel, I, R, G, B, W) when is_pid(Neopixel), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255, 0 =< W, W =< 255 ->
+    gen_server:call(Neopixel, {set_pixel_rgbw, I, R, G, B, W});
+set_pixel_rgbw(_Neopixel, _I, _R, _G, _B, _W) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   I               pixel index (`0..NumPixels - 1')
 %% @param   H               Hue value (`0..359')
 %% @param   S               Saturation value (`0..100')
 %% @param   V               Value (`0..100')
@@ -181,7 +201,7 @@ get_brightness(_Neopixel) ->
 
 %% @hidden
 init([Pin, NumPixels, Options]) ->
-    Handle = ?MODULE:nif_init(Pin, NumPixels, maps:get(channel, Options)),
+    Handle = ?MODULE:nif_init(Pin, NumPixels, maps:get(channel, Options), maps:get(led_type, Options)),
     {ok, #state{
         pin=Pin,
         num_pixels=NumPixels,
@@ -198,6 +218,8 @@ handle_call(refresh, _From, State) ->
     {reply, ?MODULE:nif_refresh(State#state.nif_handle, maps:get(timeout, State#state.options)), State};
 handle_call({set_pixel_rgb, I, R, G, B}, _From, State) ->
     {reply, ?MODULE:nif_set_pixel_rgb(State#state.nif_handle, I, R, G, B), State};
+handle_call({set_pixel_rgbw, I, R, G, B, W}, _From, State) ->
+    {reply, ?MODULE:nif_set_pixel_rgbw(State#state.nif_handle, I, R, G, B, W), State};
 handle_call({set_pixel_hsv, I, H, S, V}, _From, State) ->
     {reply, ?MODULE:nif_set_pixel_hsv(State#state.nif_handle, I, H, S, V), State};
 handle_call({set_brightness, Brightness}, _From, State) ->
@@ -231,6 +253,7 @@ code_change(_OldVsn, State, _Extra) ->
 validate_options(Options) ->
     validate_timeout_option(maps:get(timeout, Options, undefined)),
     validate_channel_option(maps:get(channel, Options, undefined)),
+    validate_led_type_option(maps:get(led_type, Options, undefined)),
     Options.
 
 %% @private
@@ -251,13 +274,21 @@ validate_channel_option(channel_3) ->
 validate_channel_option(_Timeout) ->
     throw(badarg).
 
+%% @private
+validate_led_type_option(rgb) ->
+    ok;
+validate_led_type_option(rgbw) ->
+    ok;
+validate_led_type_option(_LedType) ->
+    throw(badarg).
+
 
 %%
 %% Nifs
 %%
 
 %% @hidden
-nif_init(_Pin, _NumPixels, _Channel) ->
+nif_init(_Pin, _NumPixels, _Channel, _LedType) ->
     throw(nif_error).
 
 %% @hidden
@@ -270,6 +301,10 @@ nif_refresh(_NifHandle, _Timeout) ->
 
 %% @hidden
 nif_set_pixel_rgb(_NifHandle, _Index, _Red, _Green, _Blue) ->
+    throw(nif_error).
+
+%% @hidden
+nif_set_pixel_rgbw(_NifHandle, _Index, _Red, _Green, _Blue, _White) ->
     throw(nif_error).
 
 %% @hidden

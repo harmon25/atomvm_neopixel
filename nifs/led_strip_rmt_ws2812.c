@@ -51,8 +51,10 @@ typedef struct {
     rmt_encoder_handle_t rmt_encoder;
     uint32_t strip_len;
     uint8_t brightness;
+    uint8_t bytes_per_pixel;  // 3 for RGB, 4 for RGBW
+    led_strip_type_t led_type;
     uint8_t *out_buf;      // Brightness-scaled output buffer
-    uint8_t buffer[0];     // Raw RGB values (flexible array member)
+    uint8_t buffer[0];     // Raw RGB/RGBW values (flexible array member)
 } ws2812_t;
 
 // LED strip encoder
@@ -186,11 +188,33 @@ static esp_err_t ws2812_set_pixel(led_strip_t *strip, uint32_t index, uint32_t r
     STRIP_CHECK(index < ws2812->strip_len, "index out of the maximum number of leds", err, ESP_ERR_INVALID_ARG);
     
     // Store raw RGB values - brightness applied at refresh time
-    uint32_t start = index * 3;
-    // In the order of GRB
+    uint32_t start = index * ws2812->bytes_per_pixel;
+    // In the order of GRB(W)
     ws2812->buffer[start + 0] = green & 0xFF;
     ws2812->buffer[start + 1] = red & 0xFF;
     ws2812->buffer[start + 2] = blue & 0xFF;
+    if (ws2812->bytes_per_pixel == 4) {
+        ws2812->buffer[start + 3] = 0; // White channel defaults to 0 for RGB calls
+    }
+    return ESP_OK;
+err:
+    return ret;
+}
+
+static esp_err_t ws2812_set_pixel_rgbw(led_strip_t *strip, uint32_t index, uint32_t red, uint32_t green, uint32_t blue, uint32_t white)
+{
+    esp_err_t ret = ESP_OK;
+    ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    STRIP_CHECK(ws2812->led_type == LED_STRIP_RGBW, "set_pixel_rgbw called on non-RGBW strip", err, ESP_ERR_NOT_SUPPORTED);
+    STRIP_CHECK(index < ws2812->strip_len, "index out of the maximum number of leds", err, ESP_ERR_INVALID_ARG);
+    
+    // Store raw RGBW values - brightness applied at refresh time
+    uint32_t start = index * 4;
+    // In the order of GRBW
+    ws2812->buffer[start + 0] = green & 0xFF;
+    ws2812->buffer[start + 1] = red & 0xFF;
+    ws2812->buffer[start + 2] = blue & 0xFF;
+    ws2812->buffer[start + 3] = white & 0xFF;
     return ESP_OK;
 err:
     return ret;
@@ -200,7 +224,7 @@ static esp_err_t ws2812_refresh(led_strip_t *strip, uint32_t timeout_ms)
 {
     esp_err_t ret = ESP_OK;
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
-    uint32_t buf_size = ws2812->strip_len * 3;
+    uint32_t buf_size = ws2812->strip_len * ws2812->bytes_per_pixel;
     uint8_t *tx_buf;
     
     // Apply brightness scaling to output buffer
@@ -232,7 +256,7 @@ err:
 static esp_err_t ws2812_clear(led_strip_t *strip, uint32_t timeout_ms)
 {
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
-    memset(ws2812->buffer, 0, ws2812->strip_len * 3);
+    memset(ws2812->buffer, 0, ws2812->strip_len * ws2812->bytes_per_pixel);
     return ws2812_refresh(strip, timeout_ms);
 }
 
@@ -275,8 +299,11 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
     
     STRIP_CHECK(config, "configuration can't be null", err, NULL);
 
-    // 24 bits per LED (3 bytes: G, R, B)
-    uint32_t buf_size = config->max_leds * 3;
+    // Determine bytes per pixel based on LED type
+    uint8_t bytes_per_pixel = (config->led_type == LED_STRIP_RGBW) ? 4 : 3;
+    
+    // Allocate buffer based on LED type (3 bytes for RGB, 4 bytes for RGBW)
+    uint32_t buf_size = config->max_leds * bytes_per_pixel;
     uint32_t ws2812_size = sizeof(ws2812_t) + buf_size;
     ws2812 = calloc(1, ws2812_size);
     STRIP_CHECK(ws2812, "request memory for ws2812 failed", err, NULL);
@@ -312,7 +339,10 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
 
     ws2812->strip_len = config->max_leds;
     ws2812->brightness = config->brightness ? config->brightness : 255;
+    ws2812->bytes_per_pixel = bytes_per_pixel;
+    ws2812->led_type = config->led_type;
     ws2812->parent.set_pixel = ws2812_set_pixel;
+    ws2812->parent.set_pixel_rgbw = ws2812_set_pixel_rgbw;
     ws2812->parent.refresh = ws2812_refresh;
     ws2812->parent.clear = ws2812_clear;
     ws2812->parent.del = ws2812_del;
