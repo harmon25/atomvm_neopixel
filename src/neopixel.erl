@@ -15,23 +15,34 @@
 %% limitations under the License.
 %%
 %%-----------------------------------------------------------------------------
-%% @doc WS2812 ("Neopixel") support.
+%% @doc WS2812/SK6812 ("Neopixel") support.
 %%
-%% Use this module to drive a strip of WS2812 "noepixel" LED strips.
+%% Use this module to drive a strip of WS2812 or SK6812 "NeoPixel" LED strips.
 %%
 %% Each LED in a strip is individually addressable and can be configured in
-%% 24-bit color, using either a Red-Green-Blue (RGB) or Hue-Saturation-Value (HSV)
-%% color space.
+%% 24-bit color (RGB) or 32-bit color (RGBW for SK6812), using either a 
+%% Red-Green-Blue (RGB/RGBW) or Hue-Saturation-Value (HSV) color space.
+%%
+%% Global brightness control is supported (0-255).
+%%
+%% Options:
+%% <ul>
+%%   <li>`led_type' - `rgb' (default) or `rgbw' for SK6812 RGBW strips</li>
+%%   <li>`brightness' - Global brightness 0-255 (default 255)</li>
+%%   <li>`timeout' - Refresh timeout in ms (default 100)</li>
+%%   <li>`channel' - RMT channel (legacy, ignored in ESP-IDF 5.x)</li>
+%% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
 -module(neopixel).
 
 -export([
-    start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_rgbw/6, set_pixel_hsv/5, refresh/1,
-    set_brightness/2, get_brightness/1
+    start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_rgbw/6, set_pixel_hsv/5, 
+    set_pixel_hsvw/6, refresh/1, set_brightness/2, get_brightness/1
 ]).
--export([nif_init/4, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_rgb/5, 
-         nif_set_pixel_rgbw/6, nif_tini/2, nif_set_brightness/2, nif_get_brightness/1]). %% internal nif APIs
+-export([nif_init/4, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_hsvw/6,
+         nif_set_pixel_rgb/5, nif_set_pixel_rgbw/6, nif_tini/2, nif_set_brightness/2, 
+         nif_get_brightness/1]). %% internal nif APIs
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -behaviour(gen_server).
@@ -169,6 +180,26 @@ set_pixel_hsv(_Neopixel, _I, _R, _G, _B) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Neopixel        Neopixel instance
+%% @param   I               pixel index (`0..NumPixels - 1')
+%% @param   H               Hue value (`0..359')
+%% @param   S               Saturation value (`0..100')
+%% @param   V               Value (`0..100')
+%% @param   W               White value (`0..255')
+%% @returns ok | {error, Reason}
+%% @doc     Set a pixel value in the HSV color space with white channel (for SK6812 RGBW strips).
+%%
+%% The H, S, V values are converted to RGB, then combined with the white channel.
+%% Returns `{error, not_supported}' if called on an RGB strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pixel_hsvw(Neopixel::neopixel(), I::non_neg_integer(), H::hue(), S::saturation(), V::value(), W::color()) -> ok | {error, Reason::term()}.
+set_pixel_hsvw(Neopixel, I, H, S, V, W) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100, 0 =< W, W =< 255 ->
+    gen_server:call(Neopixel, {set_pixel_hsvw, I, H, S, V, W});
+set_pixel_hsvw(_Neopixel, _I, _H, _S, _V, _W) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
 %% @param   Brightness      Brightness value (`0..255')
 %% @returns ok | {error, Reason}
 %% @doc     Set global brightness for the strip.
@@ -223,6 +254,8 @@ handle_call({set_pixel_rgbw, I, R, G, B, W}, _From, State) ->
     {reply, ?MODULE:nif_set_pixel_rgbw(State#state.nif_handle, I, R, G, B, W), State};
 handle_call({set_pixel_hsv, I, H, S, V}, _From, State) ->
     {reply, ?MODULE:nif_set_pixel_hsv(State#state.nif_handle, I, H, S, V), State};
+handle_call({set_pixel_hsvw, I, H, S, V, W}, _From, State) ->
+    {reply, ?MODULE:nif_set_pixel_hsvw(State#state.nif_handle, I, H, S, V, W), State};
 handle_call({set_brightness, Brightness}, _From, State) ->
     {reply, ?MODULE:nif_set_brightness(State#state.nif_handle, Brightness), State};
 handle_call(get_brightness, _From, State) ->
@@ -319,6 +352,10 @@ nif_set_pixel_rgbw(_NifHandle, _Index, _Red, _Green, _Blue, _White) ->
 
 %% @hidden
 nif_set_pixel_hsv(_NifHandle, _Index, _Hue, _Saturation, _Value) ->
+    throw(nif_error).
+
+%% @hidden
+nif_set_pixel_hsvw(_NifHandle, _Index, _Hue, _Saturation, _Value, _White) ->
     throw(nif_error).
 
 %% @hidden
