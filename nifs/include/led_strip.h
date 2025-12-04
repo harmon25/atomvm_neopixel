@@ -13,12 +13,13 @@
 // limitations under the License.
 #pragma once
 
+#include "esp_idf_version.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "esp_err.h"
-#include "esp_idf_version.h"
 
 /**
 * @brief LED Strip Type

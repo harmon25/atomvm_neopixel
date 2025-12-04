@@ -11,12 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+// Must include esp_idf_version.h FIRST before any other headers
+#include "esp_idf_version.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
 #include "esp_log.h"
 #include "esp_attr.h"
-#include "esp_idf_version.h"
 #include "led_strip.h"
 
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)

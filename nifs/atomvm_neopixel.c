@@ -15,11 +15,13 @@
 // limitations under the License.
 //
 
+// Must include esp_idf_version.h FIRST before any other headers
+#include <esp_idf_version.h>
+
 #include <stdlib.h>
 
 #include <atomvm_neopixel.h>
 #include <context.h>
-#include <esp_idf_version.h>
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include <driver/rmt_tx.h>
 #else
