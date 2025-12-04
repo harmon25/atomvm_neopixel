@@ -236,11 +236,13 @@ static esp_err_t ws2812_del(led_strip_t *strip)
 led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
 {
     led_strip_t *ret = NULL;
+    ws2812_t *ws2812 = NULL;
+    
     STRIP_CHECK(config, "configuration can't be null", err, NULL);
 
     // 24 bits per LED (3 bytes: G, R, B)
     uint32_t ws2812_size = sizeof(ws2812_t) + config->max_leds * 3;
-    ws2812_t *ws2812 = calloc(1, ws2812_size);
+    ws2812 = calloc(1, ws2812_size);
     STRIP_CHECK(ws2812, "request memory for ws2812 failed", err, NULL);
 
     rmt_tx_channel_config_t tx_chan_config = {
