@@ -27,9 +27,11 @@
 -module(neopixel).
 
 -export([
-    start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_hsv/5, refresh/1
+    start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_hsv/5, refresh/1,
+    set_brightness/2, get_brightness/1
 ]).
--export([nif_init/3, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_rgb/5, nif_tini/2]). %% internal nif APIs
+-export([nif_init/3, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_rgb/5, nif_tini/2,
+         nif_set_brightness/2, nif_get_brightness/1]). %% internal nif APIs
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -behaviour(gen_server).
@@ -41,6 +43,7 @@
 -type channel() :: channel_0 | channel_1 | channel_2 | channel_3.
 
 -type color() :: 0..255.
+-type brightness() :: 0..255.
 -type hue() :: 0..359.
 -type saturation() :: 0..100.
 -type value() :: 0..100.
@@ -143,6 +146,35 @@ set_pixel_hsv(Neopixel, I, H, S, V) when is_pid(Neopixel), 0 =< H, H < 360, 0 =<
 set_pixel_hsv(_Neopixel, _I, _R, _G, _B) ->
     throw(badarg).
 
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   Brightness      Brightness value (`0..255')
+%% @returns ok | {error, Reason}
+%% @doc     Set global brightness for the strip.
+%%
+%% Brightness is applied when pixels are set. A value of 255 means full
+%% brightness (no scaling), 128 means 50% brightness, 0 means off.
+%% Note: You need to call refresh/1 and re-set pixels to see the effect.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_brightness(Neopixel::neopixel(), Brightness::brightness()) -> ok | {error, Reason::term()}.
+set_brightness(Neopixel, Brightness) when is_pid(Neopixel), 0 =< Brightness, Brightness =< 255 ->
+    gen_server:call(Neopixel, {set_brightness, Brightness});
+set_brightness(_Neopixel, _Brightness) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @returns Brightness value (`0..255')
+%% @doc     Get current global brightness for the strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_brightness(Neopixel::neopixel()) -> brightness().
+get_brightness(Neopixel) when is_pid(Neopixel) ->
+    gen_server:call(Neopixel, get_brightness);
+get_brightness(_Neopixel) ->
+    throw(badarg).
+
 %%
 %% gen_server API
 %%
@@ -168,6 +200,10 @@ handle_call({set_pixel_rgb, I, R, G, B}, _From, State) ->
     {reply, ?MODULE:nif_set_pixel_rgb(State#state.nif_handle, I, R, G, B), State};
 handle_call({set_pixel_hsv, I, H, S, V}, _From, State) ->
     {reply, ?MODULE:nif_set_pixel_hsv(State#state.nif_handle, I, H, S, V), State};
+handle_call({set_brightness, Brightness}, _From, State) ->
+    {reply, ?MODULE:nif_set_brightness(State#state.nif_handle, Brightness), State};
+handle_call(get_brightness, _From, State) ->
+    {reply, ?MODULE:nif_get_brightness(State#state.nif_handle), State};
 handle_call(Request, _From, State) ->
     {reply, {error, {unknown_request, Request}}, State}.
 
@@ -238,6 +274,14 @@ nif_set_pixel_rgb(_NifHandle, _Index, _Red, _Green, _Blue) ->
 
 %% @hidden
 nif_set_pixel_hsv(_NifHandle, _Index, _Hue, _Saturation, _Value) ->
+    throw(nif_error).
+
+%% @hidden
+nif_set_brightness(_NifHandle, _Brightness) ->
+    throw(nif_error).
+
+%% @hidden
+nif_get_brightness(_NifHandle) ->
     throw(nif_error).
 
 %% @hidden

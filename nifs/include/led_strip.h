@@ -85,6 +85,26 @@ struct led_strip_s {
     *      - ESP_FAIL: Free resources failed because error occurred
     */
     esp_err_t (*del)(led_strip_t *strip);
+
+    /**
+    * @brief Set global brightness for the strip
+    *
+    * @param strip: LED strip
+    * @param brightness: brightness value (0-255)
+    *
+    * @return
+    *      - ESP_OK: Set brightness successfully
+    */
+    esp_err_t (*set_brightness)(led_strip_t *strip, uint8_t brightness);
+
+    /**
+    * @brief Get current global brightness
+    *
+    * @param strip: LED strip
+    *
+    * @return current brightness value (0-255)
+    */
+    uint8_t (*get_brightness)(led_strip_t *strip);
 };
 
 /**
@@ -94,6 +114,7 @@ struct led_strip_s {
 typedef struct {
     uint32_t max_leds;   /*!< Maximum LEDs in a single strip */
     int gpio_num;        /*!< GPIO number */
+    uint8_t brightness;  /*!< Global brightness (0-255), default 255 */
 } led_strip_config_t;
 
 /**

@@ -50,6 +50,7 @@ typedef struct {
     rmt_channel_handle_t rmt_chan;
     rmt_encoder_handle_t rmt_encoder;
     uint32_t strip_len;
+    uint8_t brightness;
     uint8_t buffer[0];
 } ws2812_t;
 
@@ -183,6 +184,14 @@ static esp_err_t ws2812_set_pixel(led_strip_t *strip, uint32_t index, uint32_t r
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
     STRIP_CHECK(index < ws2812->strip_len, "index out of the maximum number of leds", err, ESP_ERR_INVALID_ARG);
     
+    // Apply brightness scaling
+    uint8_t br = ws2812->brightness;
+    if (br < 255) {
+        red = (red * br) >> 8;
+        green = (green * br) >> 8;
+        blue = (blue * br) >> 8;
+    }
+    
     uint32_t start = index * 3;
     // In the order of GRB
     ws2812->buffer[start + 0] = green & 0xFF;
@@ -216,6 +225,19 @@ static esp_err_t ws2812_clear(led_strip_t *strip, uint32_t timeout_ms)
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
     memset(ws2812->buffer, 0, ws2812->strip_len * 3);
     return ws2812_refresh(strip, timeout_ms);
+}
+
+static esp_err_t ws2812_set_brightness(led_strip_t *strip, uint8_t brightness)
+{
+    ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    ws2812->brightness = brightness;
+    return ESP_OK;
+}
+
+static uint8_t ws2812_get_brightness(led_strip_t *strip)
+{
+    ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    return ws2812->brightness;
 }
 
 static esp_err_t ws2812_del(led_strip_t *strip)
@@ -270,10 +292,13 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
                 "enable RMT TX channel failed", err, NULL);
 
     ws2812->strip_len = config->max_leds;
+    ws2812->brightness = config->brightness ? config->brightness : 255;
     ws2812->parent.set_pixel = ws2812_set_pixel;
     ws2812->parent.refresh = ws2812_refresh;
     ws2812->parent.clear = ws2812_clear;
     ws2812->parent.del = ws2812_del;
+    ws2812->parent.set_brightness = ws2812_set_brightness;
+    ws2812->parent.get_brightness = ws2812_get_brightness;
 
     return &ws2812->parent;
 err:

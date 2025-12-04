@@ -207,8 +207,60 @@ static term nif_set_pixel_hsv(Context *ctx, int argc, term argv[])
         term_put_tuple_element(error_tuple, 1, term_from_int(err));
         return error_tuple;
     }
-    TRACE("Set pixel %i to r=%i g=%i b=%i\n", i, red, green, blue);
+    TRACE("Set pixel %i to r=%i g=%i b=%i\n", i, term_to_int(red), term_to_int(green), term_to_int(blue));
     return OK_ATOM;
+}
+
+
+static term nif_set_brightness(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+    term brightness = argv[1];
+    VALIDATE_VALUE(brightness, term_is_integer);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+
+    avm_int_t br = term_to_int(brightness);
+    if (br < 0 || br > 255) {
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, BADARG_ATOM);
+        return error_tuple;
+    }
+
+    esp_err_t err = strip->set_brightness(strip, (uint8_t)br);
+    if (err != ESP_OK) {
+        TRACE("Failed to set brightness to %i.  err=%i\n", br, err);
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
+    }
+    TRACE("Set brightness to %i\n", br);
+    return OK_ATOM;
+}
+
+
+static term nif_get_brightness(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+
+    uint8_t brightness = strip->get_brightness(strip);
+    return term_from_int(brightness);
 }
 
 
@@ -266,6 +318,16 @@ static const struct Nif set_pixel_rgb_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_set_pixel_rgb
 };
+static const struct Nif set_brightness_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_set_brightness
+};
+static const struct Nif get_brightness_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_get_brightness
+};
 static const struct Nif tini_nif =
 {
     .base.type = NIFFunctionType,
@@ -304,6 +366,14 @@ const struct Nif *atomvm_neopixel_get_nif(const char *nifname)
     if (strcmp("neopixel:nif_set_pixel_hsv/5", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_pixel_hsv_nif;
+    }
+    if (strcmp("neopixel:nif_set_brightness/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &set_brightness_nif;
+    }
+    if (strcmp("neopixel:nif_get_brightness/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &get_brightness_nif;
     }
     if (strcmp("neopixel:nif_tini/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
