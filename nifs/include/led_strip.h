@@ -26,12 +26,6 @@ extern "C" {
 typedef struct led_strip_s led_strip_t;
 
 /**
-* @brief LED Strip Device Type
-*
-*/
-typedef void *led_strip_dev_t;
-
-/**
 * @brief Declare of LED Strip Type
 *
 */
@@ -99,18 +93,8 @@ struct led_strip_s {
 */
 typedef struct {
     uint32_t max_leds;   /*!< Maximum LEDs in a single strip */
-    led_strip_dev_t dev; /*!< LED strip device (e.g. RMT channel, PWM channel, etc) */
+    int gpio_num;        /*!< GPIO number */
 } led_strip_config_t;
-
-/**
- * @brief Default configuration for LED strip
- *
- */
-#define LED_STRIP_DEFAULT_CONFIG(number, dev_hdl) \
-    {                                             \
-        .max_leds = number,                       \
-        .dev = dev_hdl,                           \
-    }
 
 /**
 * @brief Install a new ws2812 driver (based on RMT peripheral)

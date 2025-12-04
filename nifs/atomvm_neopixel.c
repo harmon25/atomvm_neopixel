@@ -19,7 +19,6 @@
 
 #include <atomvm_neopixel.h>
 #include <context.h>
-#include <driver/rmt.h>
 #include <defaultatoms.h>
 #include <esp_log.h>
 #include <esp32_sys.h>
@@ -31,18 +30,8 @@
 #include "trace.h"
 
 #define TAG "atomvm_neopixel"
-#define NO_ALLOC_FLAGS 0
 
-// References
-// https://docs.espressif.com/projects/esp-idf/en/v3.3.4/api-reference/peripherals/rmt.html
-//
-
-static const char *const led_strip_atom       = "\x9"  "led_strip";
-static const char *const channel_0_atom       = "\x9"  "channel_0";
-static const char *const channel_1_atom       = "\x9"  "channel_1";
-static const char *const channel_2_atom       = "\x9"  "channel_2";
-static const char *const channel_3_atom       = "\x9"  "channel_3";
-//                                                      123456789ABCDEF01
+static const char *const led_strip_atom = "\x9" "led_strip";
 
 
 static inline term ptr_to_binary(void *ptr, Context* ctx)
@@ -61,25 +50,6 @@ static inline void *binary_to_ptr(term binary)
 }
 
 
-static rmt_channel_t get_rmt_channel(Context *ctx, term channel)
-{
-    if (channel == globalcontext_make_atom(ctx->global, channel_0_atom)) {
-        return RMT_CHANNEL_1;
-    } else if (channel == globalcontext_make_atom(ctx->global, channel_1_atom)) {
-        return RMT_CHANNEL_2;
-    } else if (channel == globalcontext_make_atom(ctx->global, channel_2_atom)) {
-        return RMT_CHANNEL_2;
-    } else if (channel == globalcontext_make_atom(ctx->global, channel_3_atom)) {
-        return RMT_CHANNEL_3;
-#if SOC_RMT_CHANNELS_PER_GROUP > 4
-    // TODO
-#endif
-    } else {
-        return RMT_CHANNEL_MAX;
-    }
-}
-
-
 static term nif_init(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -90,44 +60,28 @@ static term nif_init(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(num_pixels, term_is_integer);
     term channel = argv[2];
     VALIDATE_VALUE(channel, term_is_atom);
-
-    rmt_channel_t rmt_channel = get_rmt_channel(ctx, channel);
+    // Note: channel argument is kept for API compatibility but ignored in ESP-IDF 5.x
 
     if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    } else {
-        rmt_config_t config = RMT_DEFAULT_CONFIG_TX(term_to_int(pin), rmt_channel);
-        // set counter clock to 40MHz
-        config.clk_div = 2;
-
-        esp_err_t err = rmt_config(&config);
-        if (err != ESP_OK) {
-            TRACE("Failed to initialize rmt config.  err=%i\n", err);
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
-        }
-        err = rmt_driver_install(config.channel, 0, NO_ALLOC_FLAGS);
-        if (err != ESP_OK) {
-            TRACE("Failed to install rmt driver.  err=%i\n", err);
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
-        }
-        led_strip_config_t strip_config = LED_STRIP_DEFAULT_CONFIG(term_to_int(num_pixels), (led_strip_dev_t) config.channel);
-        led_strip_t *strip = led_strip_new_rmt_ws2812(&strip_config);
-        if (!strip) {
-            TRACE("Failed to install WS2812 driver.\n");
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, led_strip_atom));
-            return error_tuple;
-        }
-        ESP_LOGI(TAG, "Installed WS2812 driver.");
-        return ptr_to_binary(strip, ctx);
     }
+
+    led_strip_config_t strip_config = {
+        .max_leds = term_to_int(num_pixels),
+        .gpio_num = term_to_int(pin)
+    };
+    
+    led_strip_t *strip = led_strip_new_rmt_ws2812(&strip_config);
+    if (!strip) {
+        TRACE("Failed to install WS2812 driver.\n");
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, led_strip_atom));
+        return error_tuple;
+    }
+    
+    ESP_LOGI(TAG, "Installed WS2812 driver.");
+    return ptr_to_binary(strip, ctx);
 }
 
 
@@ -147,12 +101,11 @@ static term nif_clear(Context *ctx, int argc, term argv[])
         TRACE("Failed to clear led strip.  err=%i\n", err);
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        } else {
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
         }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
     }
     TRACE("Cleared led strip.\n");
     return OK_ATOM;
@@ -175,12 +128,11 @@ static term nif_refresh(Context *ctx, int argc, term argv[])
         TRACE("Failed to refresh led strip.  err=%i\n", err);
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        } else {
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
         }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
     }
     TRACE("Refreshed led strip.\n");
     return OK_ATOM;
@@ -210,12 +162,11 @@ static term nif_set_pixel_rgb(Context *ctx, int argc, term argv[])
         TRACE("Failed to set pixel value on index %i (r=%i g=%i b=%i).  err=%i\n", i, red, green, blue, err);
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        } else {
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
         }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
     }
     TRACE("Set pixel %i to r=%i g=%i b=%i\n", i, term_to_int(red), term_to_int(green), term_to_int(blue));
     return OK_ATOM;
@@ -250,12 +201,11 @@ static term nif_set_pixel_hsv(Context *ctx, int argc, term argv[])
         TRACE("Failed to set pixel value on index %i (r=%i g=%i b=%i).  err=%i\n", i, red, green, blue, err);
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        } else {
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
         }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
     }
     TRACE("Set pixel %i to r=%i g=%i b=%i\n", i, red, green, blue);
     return OK_ATOM;
@@ -270,6 +220,7 @@ static term nif_tini(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(handle, term_is_binary);
     term channel = argv[1];
     VALIDATE_VALUE(channel, term_is_atom);
+    // Note: channel argument is kept for API compatibility but ignored in ESP-IDF 5.x
 
     led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
 
@@ -278,28 +229,14 @@ static term nif_tini(Context *ctx, int argc, term argv[])
         TRACE("Failed to delete led strip.  err=%i\n", err);
         if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        } else {
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
         }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
     }
 
-    rmt_channel_t rmt_channel = get_rmt_channel(ctx, channel);
-    err = rmt_driver_uninstall(term_to_int(rmt_channel));
-    if (err != ESP_OK) {
-        TRACE("Failed to uninstall rmt driver.  err=%i\n", err);
-        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        } else {
-            term error_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, term_from_int(err));
-            return error_tuple;
-        }
-    }
-    TRACE("LED strip niti'd\n");
+    TRACE("LED strip tini'd\n");
     return OK_ATOM;
 }
 
