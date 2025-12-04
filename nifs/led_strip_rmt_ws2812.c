@@ -205,7 +205,6 @@ static esp_err_t ws2812_set_pixel_rgbw(led_strip_t *strip, uint32_t index, uint3
 {
     esp_err_t ret = ESP_OK;
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
-    ESP_LOGI(TAG, "set_pixel_rgbw: led_type=%d, bytes_per_pixel=%d", (int)ws2812->led_type, (int)ws2812->bytes_per_pixel);
     STRIP_CHECK(ws2812->led_type == LED_STRIP_RGBW, "set_pixel_rgbw called on non-RGBW strip", err, ESP_ERR_NOT_SUPPORTED);
     STRIP_CHECK(index < ws2812->strip_len, "index out of the maximum number of leds", err, ESP_ERR_INVALID_ARG);
     
@@ -342,8 +341,6 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
     ws2812->brightness = config->brightness ? config->brightness : 255;
     ws2812->bytes_per_pixel = bytes_per_pixel;
     ws2812->led_type = config->led_type;
-    ESP_LOGI(TAG, "Strip initialized: strip_len=%d, bytes_per_pixel=%d, led_type=%d", 
-             (int)ws2812->strip_len, (int)ws2812->bytes_per_pixel, (int)ws2812->led_type);
     ws2812->parent.set_pixel = ws2812_set_pixel;
     ws2812->parent.set_pixel_rgbw = ws2812_set_pixel_rgbw;
     ws2812->parent.refresh = ws2812_refresh;

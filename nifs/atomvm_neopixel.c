@@ -74,9 +74,6 @@ static term nif_init(Context *ctx, int argc, term argv[])
     led_strip_type_t led_type = LED_STRIP_RGB;
     if (globalcontext_is_term_equal_to_atom_string(ctx->global, led_type_term, rgbw_atom)) {
         led_type = LED_STRIP_RGBW;
-        ESP_LOGI(TAG, "LED type set to RGBW (4 bytes per pixel)");
-    } else {
-        ESP_LOGI(TAG, "LED type set to RGB (3 bytes per pixel)");
     }
 
     led_strip_config_t strip_config = {
@@ -84,8 +81,6 @@ static term nif_init(Context *ctx, int argc, term argv[])
         .gpio_num = term_to_int(pin),
         .led_type = led_type
     };
-    
-    ESP_LOGI(TAG, "Creating strip: leds=%d, gpio=%d, led_type=%d", (int)strip_config.max_leds, strip_config.gpio_num, (int)strip_config.led_type);
     
     led_strip_t *strip = led_strip_new_rmt_ws2812(&strip_config);
     if (!strip) {
