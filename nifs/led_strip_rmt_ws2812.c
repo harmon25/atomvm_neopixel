@@ -16,11 +16,12 @@
 #include <sys/cdefs.h>
 #include "esp_log.h"
 #include "esp_attr.h"
+#include "esp_idf_version.h"
 #include "led_strip.h"
-#include <sdkconfig.h>
 
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include "driver/rmt_tx.h"
+#include "driver/rmt_encoder.h"
 #else
 #include "driver/rmt.h"
 #endif

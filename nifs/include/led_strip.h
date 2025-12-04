@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 #include "esp_err.h"
-#include <sdkconfig.h>
+#include "esp_idf_version.h"
 
 /**
 * @brief LED Strip Type

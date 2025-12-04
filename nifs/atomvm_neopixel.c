@@ -19,7 +19,7 @@
 
 #include <atomvm_neopixel.h>
 #include <context.h>
-#include <sdkconfig.h>
+#include <esp_idf_version.h>
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include <driver/rmt_tx.h>
 #else
