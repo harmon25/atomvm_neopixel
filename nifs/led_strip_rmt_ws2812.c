@@ -50,7 +50,9 @@ typedef struct {
     rmt_channel_handle_t rmt_chan;
     rmt_encoder_handle_t rmt_encoder;
     uint32_t strip_len;
-    uint8_t buffer[0];
+    uint8_t brightness;
+    uint8_t *out_buf;      // Brightness-scaled output buffer
+    uint8_t buffer[0];     // Raw RGB values (flexible array member)
 } ws2812_t;
 
 // LED strip encoder
@@ -183,6 +185,7 @@ static esp_err_t ws2812_set_pixel(led_strip_t *strip, uint32_t index, uint32_t r
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
     STRIP_CHECK(index < ws2812->strip_len, "index out of the maximum number of leds", err, ESP_ERR_INVALID_ARG);
     
+    // Store raw RGB values - brightness applied at refresh time
     uint32_t start = index * 3;
     // In the order of GRB
     ws2812->buffer[start + 0] = green & 0xFF;
@@ -197,12 +200,27 @@ static esp_err_t ws2812_refresh(led_strip_t *strip, uint32_t timeout_ms)
 {
     esp_err_t ret = ESP_OK;
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    uint32_t buf_size = ws2812->strip_len * 3;
+    uint8_t *tx_buf;
+    
+    // Apply brightness scaling to output buffer
+    uint8_t br = ws2812->brightness;
+    if (br < 255) {
+        uint16_t scale = br + 1;
+        for (uint32_t i = 0; i < buf_size; i++) {
+            ws2812->out_buf[i] = (ws2812->buffer[i] * scale) >> 8;
+        }
+        tx_buf = ws2812->out_buf;
+    } else {
+        // Full brightness - transmit raw buffer directly (no copy needed)
+        tx_buf = ws2812->buffer;
+    }
     
     rmt_transmit_config_t tx_config = {
         .loop_count = 0,
     };
     
-    STRIP_CHECK(rmt_transmit(ws2812->rmt_chan, ws2812->rmt_encoder, ws2812->buffer, ws2812->strip_len * 3, &tx_config) == ESP_OK,
+    STRIP_CHECK(rmt_transmit(ws2812->rmt_chan, ws2812->rmt_encoder, tx_buf, buf_size, &tx_config) == ESP_OK,
                 "transmit RMT samples failed", err, ESP_FAIL);
     STRIP_CHECK(rmt_tx_wait_all_done(ws2812->rmt_chan, timeout_ms) == ESP_OK,
                 "wait tx done failed", err, ESP_FAIL);
@@ -218,6 +236,19 @@ static esp_err_t ws2812_clear(led_strip_t *strip, uint32_t timeout_ms)
     return ws2812_refresh(strip, timeout_ms);
 }
 
+static esp_err_t ws2812_set_brightness(led_strip_t *strip, uint8_t brightness)
+{
+    ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    ws2812->brightness = brightness;
+    return ESP_OK;
+}
+
+static uint8_t ws2812_get_brightness(led_strip_t *strip)
+{
+    ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    return ws2812->brightness;
+}
+
 static esp_err_t ws2812_del(led_strip_t *strip)
 {
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
@@ -229,6 +260,9 @@ static esp_err_t ws2812_del(led_strip_t *strip)
         rmt_disable(ws2812->rmt_chan);
         rmt_del_channel(ws2812->rmt_chan);
     }
+    if (ws2812->out_buf) {
+        free(ws2812->out_buf);
+    }
     free(ws2812);
     return ESP_OK;
 }
@@ -237,13 +271,20 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
 {
     led_strip_t *ret = NULL;
     ws2812_t *ws2812 = NULL;
+    uint8_t *out_buf = NULL;
     
     STRIP_CHECK(config, "configuration can't be null", err, NULL);
 
     // 24 bits per LED (3 bytes: G, R, B)
-    uint32_t ws2812_size = sizeof(ws2812_t) + config->max_leds * 3;
+    uint32_t buf_size = config->max_leds * 3;
+    uint32_t ws2812_size = sizeof(ws2812_t) + buf_size;
     ws2812 = calloc(1, ws2812_size);
     STRIP_CHECK(ws2812, "request memory for ws2812 failed", err, NULL);
+    
+    // Allocate output buffer for brightness-scaled data
+    out_buf = malloc(buf_size);
+    STRIP_CHECK(out_buf, "request memory for output buffer failed", err, NULL);
+    ws2812->out_buf = out_buf;
 
     rmt_tx_channel_config_t tx_chan_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
@@ -270,13 +311,19 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
                 "enable RMT TX channel failed", err, NULL);
 
     ws2812->strip_len = config->max_leds;
+    ws2812->brightness = config->brightness ? config->brightness : 255;
     ws2812->parent.set_pixel = ws2812_set_pixel;
     ws2812->parent.refresh = ws2812_refresh;
     ws2812->parent.clear = ws2812_clear;
     ws2812->parent.del = ws2812_del;
+    ws2812->parent.set_brightness = ws2812_set_brightness;
+    ws2812->parent.get_brightness = ws2812_get_brightness;
 
     return &ws2812->parent;
 err:
+    if (out_buf) {
+        free(out_buf);
+    }
     if (ws2812) {
         free(ws2812);
     }
