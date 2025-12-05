@@ -372,6 +372,225 @@ static term nif_get_brightness(Context *ctx, int argc, term argv[])
 }
 
 
+static term nif_fill_rgb(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+    term num_pixels = argv[1];
+    VALIDATE_VALUE(num_pixels, term_is_integer);
+    term red = argv[2];
+    VALIDATE_VALUE(red, term_is_integer);
+    term green = argv[3];
+    VALIDATE_VALUE(green, term_is_integer);
+    term blue = argv[4];
+    VALIDATE_VALUE(blue, term_is_integer);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    
+    // Use optimized direct buffer fill
+    esp_err_t err = strip->fill(strip, term_to_int(red), term_to_int(green), term_to_int(blue));
+    if (err != ESP_OK) {
+        TRACE("Failed to fill pixels.  err=%i\n", err);
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
+    }
+    TRACE("Filled pixels with r=%i g=%i b=%i\n", term_to_int(red), term_to_int(green), term_to_int(blue));
+    return OK_ATOM;
+}
+
+
+static term nif_fill_rgbw(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+    term num_pixels = argv[1];
+    VALIDATE_VALUE(num_pixels, term_is_integer);
+    term red = argv[2];
+    VALIDATE_VALUE(red, term_is_integer);
+    term green = argv[3];
+    VALIDATE_VALUE(green, term_is_integer);
+    term blue = argv[4];
+    VALIDATE_VALUE(blue, term_is_integer);
+    term white = argv[5];
+    VALIDATE_VALUE(white, term_is_integer);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    
+    // Use optimized direct buffer fill
+    esp_err_t err = strip->fill_rgbw(strip, term_to_int(red), term_to_int(green), term_to_int(blue), term_to_int(white));
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        TRACE("fill_rgbw called on non-RGBW strip\n");
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, not_supported_atom));
+        return error_tuple;
+    }
+    if (err != ESP_OK) {
+        TRACE("Failed to fill pixels.  err=%i\n", err);
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
+    }
+    TRACE("Filled pixels with r=%i g=%i b=%i w=%i\n", term_to_int(red), term_to_int(green), term_to_int(blue), term_to_int(white));
+    return OK_ATOM;
+}
+
+
+static term nif_set_pixels_rgb(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+    term offset_term = argv[1];
+    VALIDATE_VALUE(offset_term, term_is_integer);
+    term pixel_list = argv[2];
+    VALIDATE_VALUE(pixel_list, term_is_list);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_int_t offset = term_to_int(offset_term);
+
+    avm_int_t index = 0;
+    term current = pixel_list;
+    while (!term_is_nil(current)) {
+        term color = term_get_list_head(current);
+        if (!term_is_tuple(color) || term_get_tuple_arity(color) != 3) {
+            TRACE("Invalid color tuple at index %i\n", index);
+            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, BADARG_ATOM);
+            return error_tuple;
+        }
+
+        term r_term = term_get_tuple_element(color, 0);
+        term g_term = term_get_tuple_element(color, 1);
+        term b_term = term_get_tuple_element(color, 2);
+
+        if (!term_is_integer(r_term) || !term_is_integer(g_term) || !term_is_integer(b_term)) {
+            TRACE("Invalid color values at index %i\n", index);
+            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, BADARG_ATOM);
+            return error_tuple;
+        }
+
+        esp_err_t err = strip->set_pixel(strip, offset + index, term_to_int(r_term), term_to_int(g_term), term_to_int(b_term));
+        if (err != ESP_OK) {
+            TRACE("Failed to set pixel %i.  err=%i\n", offset + index, err);
+            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, term_from_int(err));
+            return error_tuple;
+        }
+
+        current = term_get_list_tail(current);
+        index++;
+    }
+    TRACE("Set %i pixels from list starting at offset %i\n", index, offset);
+    return OK_ATOM;
+}
+
+
+static term nif_set_pixels_rgbw(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+    term offset_term = argv[1];
+    VALIDATE_VALUE(offset_term, term_is_integer);
+    term pixel_list = argv[2];
+    VALIDATE_VALUE(pixel_list, term_is_list);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_int_t offset = term_to_int(offset_term);
+
+    avm_int_t index = 0;
+    term current = pixel_list;
+    while (!term_is_nil(current)) {
+        term color = term_get_list_head(current);
+        if (!term_is_tuple(color) || term_get_tuple_arity(color) != 4) {
+            TRACE("Invalid color tuple at index %i\n", index);
+            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, BADARG_ATOM);
+            return error_tuple;
+        }
+
+        term r_term = term_get_tuple_element(color, 0);
+        term g_term = term_get_tuple_element(color, 1);
+        term b_term = term_get_tuple_element(color, 2);
+        term w_term = term_get_tuple_element(color, 3);
+
+        if (!term_is_integer(r_term) || !term_is_integer(g_term) || !term_is_integer(b_term) || !term_is_integer(w_term)) {
+            TRACE("Invalid color values at index %i\n", index);
+            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, BADARG_ATOM);
+            return error_tuple;
+        }
+
+        esp_err_t err = strip->set_pixel_rgbw(strip, offset + index, term_to_int(r_term), term_to_int(g_term), term_to_int(b_term), term_to_int(w_term));
+        if (err == ESP_ERR_NOT_SUPPORTED) {
+            TRACE("set_pixels_rgbw called on non-RGBW strip\n");
+            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, not_supported_atom));
+            return error_tuple;
+        }
+        if (err != ESP_OK) {
+            TRACE("Failed to set pixel %i.  err=%i\n", offset + index, err);
+            if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, term_from_int(err));
+            return error_tuple;
+        }
+
+        current = term_get_list_tail(current);
+        index++;
+    }
+    TRACE("Set %i RGBW pixels from list starting at offset %i\n", index, offset);
+    return OK_ATOM;
+}
+
+
 static term nif_tini(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -446,6 +665,26 @@ static const struct Nif get_brightness_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_get_brightness
 };
+static const struct Nif fill_rgb_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_fill_rgb
+};
+static const struct Nif fill_rgbw_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_fill_rgbw
+};
+static const struct Nif set_pixels_rgb_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_set_pixels_rgb
+};
+static const struct Nif set_pixels_rgbw_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_set_pixels_rgbw
+};
 static const struct Nif tini_nif =
 {
     .base.type = NIFFunctionType,
@@ -500,6 +739,22 @@ const struct Nif *atomvm_neopixel_get_nif(const char *nifname)
     if (strcmp("neopixel:nif_get_brightness/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &get_brightness_nif;
+    }
+    if (strcmp("neopixel:nif_fill_rgb/5", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &fill_rgb_nif;
+    }
+    if (strcmp("neopixel:nif_fill_rgbw/6", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &fill_rgbw_nif;
+    }
+    if (strcmp("neopixel:nif_set_pixels_rgb/3", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &set_pixels_rgb_nif;
+    }
+    if (strcmp("neopixel:nif_set_pixels_rgbw/3", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &set_pixels_rgbw_nif;
     }
     if (strcmp("neopixel:nif_tini/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

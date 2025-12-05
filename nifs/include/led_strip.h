@@ -123,6 +123,34 @@ struct led_strip_s {
     * @return current brightness value (0-255)
     */
     uint8_t (*get_brightness)(led_strip_t *strip);
+
+    /**
+    * @brief Fill entire strip with a single RGB color
+    *
+    * @param strip: LED strip
+    * @param red: red part of color
+    * @param green: green part of color
+    * @param blue: blue part of color
+    *
+    * @return
+    *      - ESP_OK: Fill successfully
+    */
+    esp_err_t (*fill)(led_strip_t *strip, uint32_t red, uint32_t green, uint32_t blue);
+
+    /**
+    * @brief Fill entire strip with a single RGBW color
+    *
+    * @param strip: LED strip
+    * @param red: red part of color
+    * @param green: green part of color
+    * @param blue: blue part of color
+    * @param white: white part of color
+    *
+    * @return
+    *      - ESP_OK: Fill successfully
+    *      - ESP_ERR_NOT_SUPPORTED: Strip is not RGBW type
+    */
+    esp_err_t (*fill_rgbw)(led_strip_t *strip, uint32_t red, uint32_t green, uint32_t blue, uint32_t white);
 };
 
 /**
