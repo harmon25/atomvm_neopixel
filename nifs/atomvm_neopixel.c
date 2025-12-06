@@ -452,6 +452,96 @@ static term nif_fill_rgbw(Context *ctx, int argc, term argv[])
 }
 
 
+static term nif_fill_hsv(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+    term num_pixels = argv[1];
+    VALIDATE_VALUE(num_pixels, term_is_integer);
+    term hue = argv[2];
+    VALIDATE_VALUE(hue, term_is_integer);
+    term saturation = argv[3];
+    VALIDATE_VALUE(saturation, term_is_integer);
+    term value = argv[4];
+    VALIDATE_VALUE(value, term_is_integer);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    
+    // Convert HSV to RGB
+    uint32_t red = 0, green = 0, blue = 0;
+    led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
+    
+    // Use optimized direct buffer fill with converted RGB values
+    esp_err_t err = strip->fill(strip, red, green, blue);
+    if (err != ESP_OK) {
+        TRACE("Failed to fill pixels.  err=%i\n", err);
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
+    }
+    TRACE("Filled pixels with h=%i s=%i v=%i (r=%i g=%i b=%i)\n", 
+          term_to_int(hue), term_to_int(saturation), term_to_int(value), red, green, blue);
+    return OK_ATOM;
+}
+
+
+static term nif_fill_hsvw(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term handle = argv[0];
+    VALIDATE_VALUE(handle, term_is_binary);
+    term num_pixels = argv[1];
+    VALIDATE_VALUE(num_pixels, term_is_integer);
+    term hue = argv[2];
+    VALIDATE_VALUE(hue, term_is_integer);
+    term saturation = argv[3];
+    VALIDATE_VALUE(saturation, term_is_integer);
+    term value = argv[4];
+    VALIDATE_VALUE(value, term_is_integer);
+    term white = argv[5];
+    VALIDATE_VALUE(white, term_is_integer);
+
+    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    
+    // Convert HSV to RGB
+    uint32_t red = 0, green = 0, blue = 0;
+    led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
+    
+    // Use optimized direct buffer fill with converted RGB + white values
+    esp_err_t err = strip->fill_rgbw(strip, red, green, blue, term_to_int(white));
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        TRACE("fill_hsvw called on non-RGBW strip\n");
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, not_supported_atom));
+        return error_tuple;
+    }
+    if (err != ESP_OK) {
+        TRACE("Failed to fill pixels.  err=%i\n", err);
+        if (UNLIKELY(memory_ensure_free(ctx, 3) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term error_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(error_tuple, 1, term_from_int(err));
+        return error_tuple;
+    }
+    TRACE("Filled pixels with h=%i s=%i v=%i w=%i\n", 
+          term_to_int(hue), term_to_int(saturation), term_to_int(value), term_to_int(white));
+    return OK_ATOM;
+}
+
+
 static term nif_set_pixels_rgb(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -675,6 +765,16 @@ static const struct Nif fill_rgbw_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_fill_rgbw
 };
+static const struct Nif fill_hsv_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_fill_hsv
+};
+static const struct Nif fill_hsvw_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_fill_hsvw
+};
 static const struct Nif set_pixels_rgb_nif =
 {
     .base.type = NIFFunctionType,
@@ -747,6 +847,14 @@ const struct Nif *atomvm_neopixel_get_nif(const char *nifname)
     if (strcmp("neopixel:nif_fill_rgbw/6", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &fill_rgbw_nif;
+    }
+    if (strcmp("neopixel:nif_fill_hsv/5", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &fill_hsv_nif;
+    }
+    if (strcmp("neopixel:nif_fill_hsvw/6", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &fill_hsvw_nif;
     }
     if (strcmp("neopixel:nif_set_pixels_rgb/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

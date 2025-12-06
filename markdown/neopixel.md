@@ -234,6 +234,31 @@ For RGBW strips, use `neopixel:fill_rgbw/5`:
 
 > **Note:** Calling `fill_rgbw/5` on an RGB strip will return `{error, not_supported}`.
 
+#### Filling with HSV Colors
+
+Use `neopixel:fill_hsv/4` to fill the strip using the HSV color space. This is convenient for color cycling effects like rainbows:
+
+    %% erlang
+    %% Fill entire strip with red (hue=0)
+    ok = neopixel:fill_hsv(NeoPixel, 0, 100, 100).
+    
+    %% Fill with cyan (hue=180) at 50% brightness
+    ok = neopixel:fill_hsv(NeoPixel, 180, 100, 50).
+
+Or in Elixir:
+
+    # elixir
+    # Rainbow cycle - just increment hue each frame
+    :ok = :neopixel.fill_hsv(neo_pixel, hue, 100, 50)
+
+For RGBW strips, use `neopixel:fill_hsvw/5` to combine HSV color with the white channel:
+
+    %% erlang
+    %% Warm white: orange tint (H=30) plus white LED
+    ok = neopixel:fill_hsvw(NeoPixel, 30, 50, 50, 200).
+
+> **Note:** Calling `fill_hsvw/5` on an RGB strip will return `{error, not_supported}`.
+
 ### Setting Multiple Pixels
 
 Use `neopixel:set_pixels_rgb/2` to set multiple pixels at once from a list of `{R, G, B}` tuples. Pixels are set starting at index 0.

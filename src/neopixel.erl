@@ -39,12 +39,13 @@
 -export([
     start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_rgbw/6, set_pixel_hsv/5, 
     set_pixel_hsvw/6, refresh/1, set_brightness/2, get_brightness/1,
-    fill_rgb/4, fill_rgbw/5, set_pixels_rgb/2, set_pixels_rgb/3, set_pixels_rgbw/2, set_pixels_rgbw/3
+    fill_rgb/4, fill_rgbw/5, fill_hsv/4, fill_hsvw/5, 
+    set_pixels_rgb/2, set_pixels_rgb/3, set_pixels_rgbw/2, set_pixels_rgbw/3
 ]).
 -export([nif_init/4, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_hsvw/6,
          nif_set_pixel_rgb/5, nif_set_pixel_rgbw/6, nif_tini/2, nif_set_brightness/2, 
-         nif_get_brightness/1, nif_fill_rgb/5, nif_fill_rgbw/6, nif_set_pixels_rgb/3,
-         nif_set_pixels_rgbw/3]). %% internal nif APIs
+         nif_get_brightness/1, nif_fill_rgb/5, nif_fill_rgbw/6, nif_fill_hsv/5, nif_fill_hsvw/6,
+         nif_set_pixels_rgb/3, nif_set_pixels_rgbw/3]). %% internal nif APIs
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -behaviour(gen_server).
@@ -269,6 +270,44 @@ fill_rgbw(_Neopixel, _R, _G, _B, _W) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Neopixel        Neopixel instance
+%% @param   H               Hue value (`0..359')
+%% @param   S               Saturation value (`0..100')
+%% @param   V               Value (`0..100')
+%% @returns ok | {error, Reason}
+%% @doc     Fill entire strip with a single HSV color.
+%%
+%% HSV is converted to RGB in the NIF. Sets all pixels to the same color.
+%% Call refresh/1 to display.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fill_hsv(Neopixel::neopixel(), H::hue(), S::saturation(), V::value()) -> ok | {error, Reason::term()}.
+fill_hsv(Neopixel, H, S, V) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100 ->
+    gen_server:call(Neopixel, {fill_hsv, H, S, V});
+fill_hsv(_Neopixel, _H, _S, _V) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   H               Hue value (`0..359')
+%% @param   S               Saturation value (`0..100')
+%% @param   V               Value (`0..100')
+%% @param   W               White value (`0..255')
+%% @returns ok | {error, Reason}
+%% @doc     Fill entire strip with a single HSVW color (for SK6812 RGBW strips).
+%%
+%% HSV is converted to RGB in the NIF, combined with the white channel.
+%% Sets all pixels to the same color. Call refresh/1 to display.
+%% Returns `{error, not_supported}' if called on an RGB strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fill_hsvw(Neopixel::neopixel(), H::hue(), S::saturation(), V::value(), W::color()) -> ok | {error, Reason::term()}.
+fill_hsvw(Neopixel, H, S, V, W) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100, 0 =< W, W =< 255 ->
+    gen_server:call(Neopixel, {fill_hsvw, H, S, V, W});
+fill_hsvw(_Neopixel, _H, _S, _V, _W) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
 %% @param   Colors          List of `{R, G, B}' tuples
 %% @returns ok | {error, Reason}
 %% @doc     Set multiple pixels from a list of RGB colors.
@@ -372,6 +411,10 @@ handle_call({fill_rgb, R, G, B}, _From, State) ->
     {reply, ?MODULE:nif_fill_rgb(State#state.nif_handle, State#state.num_pixels, R, G, B), State};
 handle_call({fill_rgbw, R, G, B, W}, _From, State) ->
     {reply, ?MODULE:nif_fill_rgbw(State#state.nif_handle, State#state.num_pixels, R, G, B, W), State};
+handle_call({fill_hsv, H, S, V}, _From, State) ->
+    {reply, ?MODULE:nif_fill_hsv(State#state.nif_handle, State#state.num_pixels, H, S, V), State};
+handle_call({fill_hsvw, H, S, V, W}, _From, State) ->
+    {reply, ?MODULE:nif_fill_hsvw(State#state.nif_handle, State#state.num_pixels, H, S, V, W), State};
 handle_call({set_pixels_rgb, Offset, Colors}, _From, State) ->
     {reply, ?MODULE:nif_set_pixels_rgb(State#state.nif_handle, Offset, Colors), State};
 handle_call({set_pixels_rgbw, Offset, Colors}, _From, State) ->
@@ -488,6 +531,14 @@ nif_fill_rgb(_NifHandle, _NumPixels, _Red, _Green, _Blue) ->
 
 %% @hidden
 nif_fill_rgbw(_NifHandle, _NumPixels, _Red, _Green, _Blue, _White) ->
+    throw(nif_error).
+
+%% @hidden
+nif_fill_hsv(_NifHandle, _NumPixels, _Hue, _Saturation, _Value) ->
+    throw(nif_error).
+
+%% @hidden
+nif_fill_hsvw(_NifHandle, _NumPixels, _Hue, _Saturation, _Value, _White) ->
     throw(nif_error).
 
 %% @hidden
