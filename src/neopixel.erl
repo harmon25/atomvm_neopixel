@@ -38,11 +38,14 @@
 
 -export([
     start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_rgbw/6, set_pixel_hsv/5, 
-    set_pixel_hsvw/6, refresh/1, set_brightness/2, get_brightness/1
+    set_pixel_hsvw/6, refresh/1, set_brightness/2, get_brightness/1,
+    fill_rgb/4, fill_rgbw/5, fill_hsv/4, fill_hsvw/5, 
+    set_pixels_rgb/2, set_pixels_rgb/3, set_pixels_rgbw/2, set_pixels_rgbw/3
 ]).
 -export([nif_init/4, nif_clear/2, nif_refresh/2, nif_set_pixel_hsv/5, nif_set_pixel_hsvw/6,
          nif_set_pixel_rgb/5, nif_set_pixel_rgbw/6, nif_tini/2, nif_set_brightness/2, 
-         nif_get_brightness/1]). %% internal nif APIs
+         nif_get_brightness/1, nif_fill_rgb/5, nif_fill_rgbw/6, nif_fill_hsv/5, nif_fill_hsvw/6,
+         nif_set_pixels_rgb/3, nif_set_pixels_rgbw/3]). %% internal nif APIs
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -behaviour(gen_server).
@@ -58,6 +61,8 @@
 -type hue() :: 0..359.
 -type saturation() :: 0..100.
 -type value() :: 0..100.
+-type rgb_color() :: {color(), color(), color()}.
+-type rgbw_color() :: {color(), color(), color(), color()}.
 
 -define(DEFAULT_OPTIONS, #{timeout => 100, channel => channel_0, led_type => rgb}).
 
@@ -227,6 +232,148 @@ get_brightness(Neopixel) when is_pid(Neopixel) ->
 get_brightness(_Neopixel) ->
     throw(badarg).
 
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   R               Red value (`0..255')
+%% @param   G               Green value (`0..255')
+%% @param   B               Blue value (`0..255')
+%% @returns ok | {error, Reason}
+%% @doc     Fill entire strip with a single RGB color.
+%%
+%% Sets all pixels to the same color. Call refresh/1 to display.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fill_rgb(Neopixel::neopixel(), R::color(), G::color(), B::color()) -> ok | {error, Reason::term()}.
+fill_rgb(Neopixel, R, G, B) when is_pid(Neopixel), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255 ->
+    gen_server:call(Neopixel, {fill_rgb, R, G, B});
+fill_rgb(_Neopixel, _R, _G, _B) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   R               Red value (`0..255')
+%% @param   G               Green value (`0..255')
+%% @param   B               Blue value (`0..255')
+%% @param   W               White value (`0..255')
+%% @returns ok | {error, Reason}
+%% @doc     Fill entire strip with a single RGBW color (for SK6812 RGBW strips).
+%%
+%% Sets all pixels to the same color. Call refresh/1 to display.
+%% Returns `{error, not_supported}' if called on an RGB strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fill_rgbw(Neopixel::neopixel(), R::color(), G::color(), B::color(), W::color()) -> ok | {error, Reason::term()}.
+fill_rgbw(Neopixel, R, G, B, W) when is_pid(Neopixel), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255, 0 =< W, W =< 255 ->
+    gen_server:call(Neopixel, {fill_rgbw, R, G, B, W});
+fill_rgbw(_Neopixel, _R, _G, _B, _W) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   H               Hue value (`0..359')
+%% @param   S               Saturation value (`0..100')
+%% @param   V               Value (`0..100')
+%% @returns ok | {error, Reason}
+%% @doc     Fill entire strip with a single HSV color.
+%%
+%% HSV is converted to RGB in the NIF. Sets all pixels to the same color.
+%% Call refresh/1 to display.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fill_hsv(Neopixel::neopixel(), H::hue(), S::saturation(), V::value()) -> ok | {error, Reason::term()}.
+fill_hsv(Neopixel, H, S, V) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100 ->
+    gen_server:call(Neopixel, {fill_hsv, H, S, V});
+fill_hsv(_Neopixel, _H, _S, _V) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   H               Hue value (`0..359')
+%% @param   S               Saturation value (`0..100')
+%% @param   V               Value (`0..100')
+%% @param   W               White value (`0..255')
+%% @returns ok | {error, Reason}
+%% @doc     Fill entire strip with a single HSVW color (for SK6812 RGBW strips).
+%%
+%% HSV is converted to RGB in the NIF, combined with the white channel.
+%% Sets all pixels to the same color. Call refresh/1 to display.
+%% Returns `{error, not_supported}' if called on an RGB strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fill_hsvw(Neopixel::neopixel(), H::hue(), S::saturation(), V::value(), W::color()) -> ok | {error, Reason::term()}.
+fill_hsvw(Neopixel, H, S, V, W) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100, 0 =< W, W =< 255 ->
+    gen_server:call(Neopixel, {fill_hsvw, H, S, V, W});
+fill_hsvw(_Neopixel, _H, _S, _V, _W) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   Colors          List of `{R, G, B}' tuples
+%% @returns ok | {error, Reason}
+%% @doc     Set multiple pixels from a list of RGB colors.
+%%
+%% Each element in the list sets the corresponding pixel starting at index 0.
+%% The list can be shorter than the strip length.
+%% Call refresh/1 to display.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pixels_rgb(Neopixel::neopixel(), Colors::[rgb_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgb(Neopixel, Colors) ->
+    set_pixels_rgb(Neopixel, 0, Colors).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   Offset          Starting pixel index (`0..NumPixels - 1')
+%% @param   Colors          List of `{R, G, B}' tuples
+%% @returns ok | {error, Reason}
+%% @doc     Set multiple pixels from a list of RGB colors starting at offset.
+%%
+%% Each element in the list sets the corresponding pixel starting at the given offset.
+%% The list can be shorter than the strip length.
+%% Call refresh/1 to display.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pixels_rgb(Neopixel::neopixel(), Offset::non_neg_integer(), Colors::[rgb_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgb(Neopixel, Offset, Colors) when is_pid(Neopixel), is_integer(Offset), Offset >= 0, is_list(Colors) ->
+    gen_server:call(Neopixel, {set_pixels_rgb, Offset, Colors});
+set_pixels_rgb(_Neopixel, _Offset, _Colors) ->
+    throw(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   Colors          List of `{R, G, B, W}' tuples
+%% @returns ok | {error, Reason}
+%% @doc     Set multiple pixels from a list of RGBW colors (for SK6812 RGBW strips).
+%%
+%% Each element in the list sets the corresponding pixel starting at index 0.
+%% The list can be shorter than the strip length.
+%% Call refresh/1 to display.
+%% Returns `{error, not_supported}' if called on an RGB strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pixels_rgbw(Neopixel::neopixel(), Colors::[rgbw_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgbw(Neopixel, Colors) ->
+    set_pixels_rgbw(Neopixel, 0, Colors).
+
+%%-----------------------------------------------------------------------------
+%% @param   Neopixel        Neopixel instance
+%% @param   Offset          Starting pixel index (`0..NumPixels - 1')
+%% @param   Colors          List of `{R, G, B, W}' tuples
+%% @returns ok | {error, Reason}
+%% @doc     Set multiple pixels from a list of RGBW colors starting at offset.
+%%
+%% Each element in the list sets the corresponding pixel starting at the given offset.
+%% The list can be shorter than the strip length.
+%% Call refresh/1 to display.
+%% Returns `{error, not_supported}' if called on an RGB strip.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pixels_rgbw(Neopixel::neopixel(), Offset::non_neg_integer(), Colors::[rgbw_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgbw(Neopixel, Offset, Colors) when is_pid(Neopixel), is_integer(Offset), Offset >= 0, is_list(Colors) ->
+    gen_server:call(Neopixel, {set_pixels_rgbw, Offset, Colors});
+set_pixels_rgbw(_Neopixel, _Offset, _Colors) ->
+    throw(badarg).
+
 %%
 %% gen_server API
 %%
@@ -260,6 +407,18 @@ handle_call({set_brightness, Brightness}, _From, State) ->
     {reply, ?MODULE:nif_set_brightness(State#state.nif_handle, Brightness), State};
 handle_call(get_brightness, _From, State) ->
     {reply, ?MODULE:nif_get_brightness(State#state.nif_handle), State};
+handle_call({fill_rgb, R, G, B}, _From, State) ->
+    {reply, ?MODULE:nif_fill_rgb(State#state.nif_handle, State#state.num_pixels, R, G, B), State};
+handle_call({fill_rgbw, R, G, B, W}, _From, State) ->
+    {reply, ?MODULE:nif_fill_rgbw(State#state.nif_handle, State#state.num_pixels, R, G, B, W), State};
+handle_call({fill_hsv, H, S, V}, _From, State) ->
+    {reply, ?MODULE:nif_fill_hsv(State#state.nif_handle, State#state.num_pixels, H, S, V), State};
+handle_call({fill_hsvw, H, S, V, W}, _From, State) ->
+    {reply, ?MODULE:nif_fill_hsvw(State#state.nif_handle, State#state.num_pixels, H, S, V, W), State};
+handle_call({set_pixels_rgb, Offset, Colors}, _From, State) ->
+    {reply, ?MODULE:nif_set_pixels_rgb(State#state.nif_handle, Offset, Colors), State};
+handle_call({set_pixels_rgbw, Offset, Colors}, _From, State) ->
+    {reply, ?MODULE:nif_set_pixels_rgbw(State#state.nif_handle, Offset, Colors), State};
 handle_call(Request, _From, State) ->
     {reply, {error, {unknown_request, Request}}, State}.
 
@@ -364,6 +523,30 @@ nif_set_brightness(_NifHandle, _Brightness) ->
 
 %% @hidden
 nif_get_brightness(_NifHandle) ->
+    throw(nif_error).
+
+%% @hidden
+nif_fill_rgb(_NifHandle, _NumPixels, _Red, _Green, _Blue) ->
+    throw(nif_error).
+
+%% @hidden
+nif_fill_rgbw(_NifHandle, _NumPixels, _Red, _Green, _Blue, _White) ->
+    throw(nif_error).
+
+%% @hidden
+nif_fill_hsv(_NifHandle, _NumPixels, _Hue, _Saturation, _Value) ->
+    throw(nif_error).
+
+%% @hidden
+nif_fill_hsvw(_NifHandle, _NumPixels, _Hue, _Saturation, _Value, _White) ->
+    throw(nif_error).
+
+%% @hidden
+nif_set_pixels_rgb(_NifHandle, _Offset, _Colors) ->
+    throw(nif_error).
+
+%% @hidden
+nif_set_pixels_rgbw(_NifHandle, _Offset, _Colors) ->
     throw(nif_error).
 
 %% @hidden

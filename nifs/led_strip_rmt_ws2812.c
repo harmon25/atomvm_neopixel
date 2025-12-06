@@ -230,9 +230,23 @@ static esp_err_t ws2812_refresh(led_strip_t *strip, uint32_t timeout_ms)
     // Apply brightness scaling to output buffer
     uint8_t br = ws2812->brightness;
     if (br < 255) {
+        uint8_t *src = ws2812->buffer;
+        uint8_t *dst = ws2812->out_buf;
         uint16_t scale = br + 1;
-        for (uint32_t i = 0; i < buf_size; i++) {
-            ws2812->out_buf[i] = (ws2812->buffer[i] * scale) >> 8;
+        
+        // Process 4 bytes at a time when possible (common case for RGBW, 
+        // and RGB strips with pixel count divisible by 4/3)
+        uint32_t i = 0;
+        uint32_t fast_end = buf_size & ~3U;  // Round down to multiple of 4
+        for (; i < fast_end; i += 4) {
+            dst[i + 0] = (src[i + 0] * scale) >> 8;
+            dst[i + 1] = (src[i + 1] * scale) >> 8;
+            dst[i + 2] = (src[i + 2] * scale) >> 8;
+            dst[i + 3] = (src[i + 3] * scale) >> 8;
+        }
+        // Handle remaining bytes
+        for (; i < buf_size; i++) {
+            dst[i] = (src[i] * scale) >> 8;
         }
         tx_buf = ws2812->out_buf;
     } else {
@@ -271,6 +285,66 @@ static uint8_t ws2812_get_brightness(led_strip_t *strip)
 {
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
     return ws2812->brightness;
+}
+
+static esp_err_t ws2812_fill(led_strip_t *strip, uint32_t red, uint32_t green, uint32_t blue)
+{
+    ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    uint8_t bytes_per_pixel = ws2812->bytes_per_pixel;
+    uint32_t strip_len = ws2812->strip_len;
+    uint8_t *buf = ws2812->buffer;
+    
+    // Pre-compute the GRB(W) values once
+    uint8_t g = green & 0xFF;
+    uint8_t r = red & 0xFF;
+    uint8_t b = blue & 0xFF;
+    
+    if (bytes_per_pixel == 3) {
+        // RGB: write 3 bytes per pixel
+        for (uint32_t i = 0; i < strip_len; i++) {
+            uint32_t idx = i * 3;
+            buf[idx + 0] = g;
+            buf[idx + 1] = r;
+            buf[idx + 2] = b;
+        }
+    } else {
+        // RGBW: write 4 bytes per pixel, W=0
+        for (uint32_t i = 0; i < strip_len; i++) {
+            uint32_t idx = i * 4;
+            buf[idx + 0] = g;
+            buf[idx + 1] = r;
+            buf[idx + 2] = b;
+            buf[idx + 3] = 0;
+        }
+    }
+    return ESP_OK;
+}
+
+static esp_err_t ws2812_fill_rgbw(led_strip_t *strip, uint32_t red, uint32_t green, uint32_t blue, uint32_t white)
+{
+    ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
+    
+    if (ws2812->led_type != LED_STRIP_RGBW) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    
+    uint32_t strip_len = ws2812->strip_len;
+    uint8_t *buf = ws2812->buffer;
+    
+    // Pre-compute the GRBW values once
+    uint8_t g = green & 0xFF;
+    uint8_t r = red & 0xFF;
+    uint8_t b = blue & 0xFF;
+    uint8_t w = white & 0xFF;
+    
+    for (uint32_t i = 0; i < strip_len; i++) {
+        uint32_t idx = i * 4;
+        buf[idx + 0] = g;
+        buf[idx + 1] = r;
+        buf[idx + 2] = b;
+        buf[idx + 3] = w;
+    }
+    return ESP_OK;
 }
 
 static esp_err_t ws2812_del(led_strip_t *strip)
@@ -348,6 +422,8 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
     ws2812->parent.del = ws2812_del;
     ws2812->parent.set_brightness = ws2812_set_brightness;
     ws2812->parent.get_brightness = ws2812_get_brightness;
+    ws2812->parent.fill = ws2812_fill;
+    ws2812->parent.fill_rgbw = ws2812_fill_rgbw;
 
     return &ws2812->parent;
 err:
@@ -363,8 +439,9 @@ err:
 void led_strip_hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_t *g, uint32_t *b)
 {
     h %= 360;
-    uint32_t rgb_max = v * 2.55f;
-    uint32_t rgb_min = rgb_max * (100 - s) / 100.0f;
+    // Use integer math: rgb_max = v * 255 / 100 (avoiding float 2.55f)
+    uint32_t rgb_max = (v * 255 + 50) / 100;  // +50 for rounding
+    uint32_t rgb_min = rgb_max * (100 - s) / 100;
 
     uint32_t i = h / 60;
     uint32_t diff = h % 60;
