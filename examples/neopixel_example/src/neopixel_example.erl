@@ -16,7 +16,7 @@
 %%
 -module(neopixel_example).
 
--export([start/0, demo_fill/0, demo_pattern/0]).
+-export([start/0, demo_fill/0, demo_pattern/0, demo_rainbow/0]).
 
 -define(NEOPIXEL_PIN, 18).
 -define(NUM_PIXELS, 4).
@@ -24,17 +24,31 @@
 -define(SATURATION, 100).
 -define(VALUE, 15).
 
-%% @doc Main example - rainbow cycle on each pixel
+%% @doc Main example - rainbow cycle on each pixel (optimized single-process version)
+%% This version updates all pixels in a single process, then calls refresh once.
+%% This is the recommended pattern to avoid flickering.
 start() ->
+    demo_rainbow().
+
+%% @doc Optimized rainbow demo - single process updates all pixels before refresh
+demo_rainbow() ->
     {ok, NeoPixel} = neopixel:start(?NEOPIXEL_PIN, ?NUM_PIXELS),
     ok = neopixel:clear(NeoPixel),
+    rainbow_loop(NeoPixel, 0, 100).
+
+rainbow_loop(NeoPixel, BaseHue, SleepMs) ->
+    %% Update all pixels first (no refresh yet)
     lists:foreach(
         fun(I) ->
-            spawn(fun() -> loop(NeoPixel, I, 0, 100) end)
+            Hue = (BaseHue + (I * 360 div ?NUM_PIXELS)) rem 360,
+            ok = neopixel:set_pixel_hsv(NeoPixel, I, Hue, ?SATURATION, ?VALUE)
         end,
         lists:seq(0, ?NUM_PIXELS - 1)
     ),
-    timer:sleep(infinity).
+    %% Single refresh after all pixels are set - prevents flickering
+    ok = neopixel:refresh(NeoPixel),
+    timer:sleep(SleepMs),
+    rainbow_loop(NeoPixel, (BaseHue + 1) rem 360, SleepMs).
 
 %% @doc Demo: Fill entire strip with solid colors
 demo_fill() ->
@@ -69,9 +83,3 @@ pattern_loop(NeoPixel, Pattern, Offset) ->
 
 rotate_list(List, 0) -> List;
 rotate_list([H | T], N) -> rotate_list(T ++ [H], N - 1).
-
-loop(NeoPixel, I, Hue, SleepMs) ->
-    ok = neopixel:set_pixel_hsv(NeoPixel, I, Hue, ?SATURATION, ?VALUE),
-    ok = neopixel:refresh(NeoPixel),
-    timer:sleep(SleepMs),
-    loop(NeoPixel, I, (Hue + 1) rem 360, SleepMs).

@@ -6,4 +6,26 @@ config AVM_NEOPIXEL_ENABLE
 	help
 		Use this parameter to enable or disable the AtomVM NEOPIXEL driver.
 
+config AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS
+	int "RMT memory block symbols"
+	default 192
+	range 64 512
+	depends on AVM_NEOPIXEL_ENABLE
+	help
+		Number of RMT memory block symbols. Larger values improve WiFi
+		coexistence by buffering more data in hardware, reducing sensitivity
+		to interrupt timing. Increase this if you experience LED flickering
+		when WiFi is active. Default is 192, range 64-512.
+
+config AVM_NEOPIXEL_USE_DMA
+	bool "Use DMA for RMT transfers"
+	default y
+	depends on AVM_NEOPIXEL_ENABLE
+	help
+		Enable DMA mode for RMT transfers. DMA mode is more resilient to
+		WiFi interrupts as it offloads data transfer from the CPU.
+		Recommended for systems with WiFi enabled. Some ESP32 variants
+		may not support DMA; the driver will automatically fall back to
+		non-DMA mode if DMA initialization fails.
+
 endmenu

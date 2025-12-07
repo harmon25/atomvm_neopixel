@@ -15,10 +15,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
+#include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_attr.h"
 #include "driver/rmt_tx.h"
 #include "driver/rmt_encoder.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "led_strip.h"
 
 static const char *TAG = "ws2812";
@@ -256,12 +259,24 @@ static esp_err_t ws2812_refresh(led_strip_t *strip, uint32_t timeout_ms)
     
     rmt_transmit_config_t tx_config = {
         .loop_count = 0,
+        .flags = {
+            .eot_level = 0,  // End of transmission level low (reset state)
+        },
     };
     
-    STRIP_CHECK(rmt_transmit(ws2812->rmt_chan, ws2812->rmt_encoder, tx_buf, buf_size, &tx_config) == ESP_OK,
-                "transmit RMT samples failed", err, ESP_FAIL);
-    STRIP_CHECK(rmt_tx_wait_all_done(ws2812->rmt_chan, timeout_ms) == ESP_OK,
-                "wait tx done failed", err, ESP_FAIL);
+    // Temporarily boost task priority during transmission to reduce WiFi interference
+    UBaseType_t orig_priority = uxTaskPriorityGet(NULL);
+    vTaskPrioritySet(NULL, configMAX_PRIORITIES - 1);
+    
+    esp_err_t tx_err = rmt_transmit(ws2812->rmt_chan, ws2812->rmt_encoder, tx_buf, buf_size, &tx_config);
+    if (tx_err == ESP_OK) {
+        tx_err = rmt_tx_wait_all_done(ws2812->rmt_chan, timeout_ms);
+    }
+    
+    // Restore original priority
+    vTaskPrioritySet(NULL, orig_priority);
+    
+    STRIP_CHECK(tx_err == ESP_OK, "RMT transmission failed", err, ESP_FAIL);
     return ESP_OK;
 err:
     return ret;
@@ -387,15 +402,40 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
     STRIP_CHECK(out_buf, "request memory for output buffer failed", err, NULL);
     ws2812->out_buf = out_buf;
 
+    // Configurable memory block size - larger values improve WiFi coexistence
+#ifdef CONFIG_AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS
+    uint32_t mem_block_symbols = CONFIG_AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS;
+#else
+    uint32_t mem_block_symbols = 192;
+#endif
+
+    // DMA mode enables hardware-driven transfers that are interrupt-resistant
+#ifdef CONFIG_AVM_NEOPIXEL_USE_DMA
+    bool use_dma = CONFIG_AVM_NEOPIXEL_USE_DMA;
+#else
+    bool use_dma = true;  // Default to DMA enabled
+#endif
+
     rmt_tx_channel_config_t tx_chan_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .gpio_num = (gpio_num_t)config->gpio_num,
-        .mem_block_symbols = 64,
+        .mem_block_symbols = mem_block_symbols,
         .resolution_hz = 40000000, // 40MHz
-        .trans_queue_depth = 4,
+        .trans_queue_depth = 8,    // Increased from 4 for better buffering
+        .flags = {
+            .with_dma = use_dma ? 1 : 0,
+        },
     };
-    STRIP_CHECK(rmt_new_tx_channel(&tx_chan_config, &ws2812->rmt_chan) == ESP_OK,
-                "create RMT TX channel failed", err, NULL);
+    
+    esp_err_t chan_err = rmt_new_tx_channel(&tx_chan_config, &ws2812->rmt_chan);
+    if (chan_err != ESP_OK && use_dma) {
+        // Fallback: some ESP32 variants don't support DMA, try without it
+        ESP_LOGW(TAG, "DMA mode failed, falling back to non-DMA mode");
+        tx_chan_config.flags.with_dma = 0;
+        tx_chan_config.mem_block_symbols = mem_block_symbols > 128 ? 128 : mem_block_symbols;
+        chan_err = rmt_new_tx_channel(&tx_chan_config, &ws2812->rmt_chan);
+    }
+    STRIP_CHECK(chan_err == ESP_OK, "create RMT TX channel failed", err, NULL);
 
     // Calculate timing ticks (40MHz resolution)
     uint32_t counter_clk_hz = 40000000;
