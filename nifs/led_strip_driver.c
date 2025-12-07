@@ -267,8 +267,8 @@ avm_led_strip_t *avm_led_strip_new(const avm_led_strip_config_t *config)
     led_strip_config_t strip_config = {
         .strip_gpio_num = config->gpio_num,
         .max_leds = config->max_leds,
-        .led_pixel_format = (config->led_type == AVM_LED_STRIP_RGBW) ? LED_PIXEL_FORMAT_GRBW : LED_PIXEL_FORMAT_GRB,
         .led_model = LED_MODEL_WS2812,
+        .color_component_format = (config->led_type == AVM_LED_STRIP_RGBW) ? LED_STRIP_COLOR_COMPONENT_FMT_GRBW : LED_STRIP_COLOR_COMPONENT_FMT_GRB,
         .flags.invert_out = false,
     };
     
