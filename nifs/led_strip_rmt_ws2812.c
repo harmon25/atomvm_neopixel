@@ -22,6 +22,10 @@
 #include "driver/rmt_encoder.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_intr_alloc.h"
+#ifdef CONFIG_PM_ENABLE
+#include "esp_pm.h"
+#endif
 #include "led_strip.h"
 
 static const char *TAG = "ws2812";
@@ -41,7 +45,7 @@ static const char *TAG = "ws2812";
 #define WS2812_T0L_NS (1000)
 #define WS2812_T1H_NS (1000)
 #define WS2812_T1L_NS (350)
-#define WS2812_RESET_US (280)
+#define WS2812_RESET_US (300)  // Increased from 280 for better reliability
 
 static uint32_t ws2812_t0h_ticks = 0;
 static uint32_t ws2812_t1h_ticks = 0;
@@ -57,6 +61,9 @@ typedef struct {
     uint8_t bytes_per_pixel;  // 3 for RGB, 4 for RGBW
     led_strip_type_t led_type;
     uint8_t *out_buf;      // Brightness-scaled output buffer
+#ifdef CONFIG_PM_ENABLE
+    esp_pm_lock_handle_t pm_lock;  // Power management lock to prevent CPU freq changes
+#endif
     uint8_t buffer[0];     // Raw RGB/RGBW values (flexible array member)
 } ws2812_t;
 
@@ -69,7 +76,9 @@ typedef struct {
     rmt_symbol_word_t reset_code;
 } rmt_led_strip_encoder_t;
 
-static size_t rmt_encode_led_strip(rmt_encoder_t *encoder, rmt_channel_handle_t channel,
+// IRAM_ATTR ensures this encoder runs from RAM, not flash
+// This is critical for WiFi coexistence since flash cache can be disabled during WiFi operations
+static size_t IRAM_ATTR rmt_encode_led_strip(rmt_encoder_t *encoder, rmt_channel_handle_t channel,
                                     const void *primary_data, size_t data_size, rmt_encode_state_t *ret_state)
 {
     rmt_led_strip_encoder_t *led_encoder = __containerof(encoder, rmt_led_strip_encoder_t, base);
@@ -264,17 +273,59 @@ static esp_err_t ws2812_refresh(led_strip_t *strip, uint32_t timeout_ms)
         },
     };
     
-    // Temporarily boost task priority during transmission to reduce WiFi interference
-    UBaseType_t orig_priority = uxTaskPriorityGet(NULL);
-    vTaskPrioritySet(NULL, configMAX_PRIORITIES - 1);
+#ifdef CONFIG_PM_ENABLE
+    // Acquire PM lock to prevent CPU frequency scaling during transmission
+    if (ws2812->pm_lock) {
+        esp_pm_lock_acquire(ws2812->pm_lock);
+    }
+#endif
+    
+    // Calculate required symbols for this transmission
+    // Each byte = 8 bits = 8 RMT symbols
+    uint32_t required_symbols = buf_size * 8;
+    
+    // For strips that fit in RMT memory buffer (default 448 symbols = ~18 RGB LEDs),
+    // we can use a critical section for the entire transmission.
+    // With 448 symbols, we can do ~18 RGB LEDs or ~14 RGBW LEDs flicker-free.
+    // For longer strips, we rely on high-priority RMT ISR for buffer refills.
+#ifdef CONFIG_AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS
+    uint32_t available_symbols = CONFIG_AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS;
+#else
+    uint32_t available_symbols = 448;
+#endif
+    
+    // On DMA-capable chips, we don't need critical sections at all
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C6
+    bool use_critical_section = false;
+#else
+    bool use_critical_section = (required_symbols <= available_symbols);
+#endif
+    
+    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+    
+    if (use_critical_section) {
+        // Short strip: disable interrupts for entire transmission
+        portENTER_CRITICAL(&mux);
+    }
     
     esp_err_t tx_err = rmt_transmit(ws2812->rmt_chan, ws2812->rmt_encoder, tx_buf, buf_size, &tx_config);
-    if (tx_err == ESP_OK) {
+    
+    if (use_critical_section && tx_err == ESP_OK) {
+        // For short strips, wait inside critical section
+        tx_err = rmt_tx_wait_all_done(ws2812->rmt_chan, timeout_ms);
+        portEXIT_CRITICAL(&mux);
+    } else if (use_critical_section) {
+        portEXIT_CRITICAL(&mux);
+    } else if (tx_err == ESP_OK) {
+        // For longer strips, let RMT ISR handle buffer refills
         tx_err = rmt_tx_wait_all_done(ws2812->rmt_chan, timeout_ms);
     }
     
-    // Restore original priority
-    vTaskPrioritySet(NULL, orig_priority);
+#ifdef CONFIG_PM_ENABLE
+    if (ws2812->pm_lock) {
+        esp_pm_lock_release(ws2812->pm_lock);
+    }
+#endif
     
     STRIP_CHECK(tx_err == ESP_OK, "RMT transmission failed", err, ESP_FAIL);
     return ESP_OK;
@@ -366,6 +417,11 @@ static esp_err_t ws2812_del(led_strip_t *strip)
 {
     ws2812_t *ws2812 = __containerof(strip, ws2812_t, parent);
     
+#ifdef CONFIG_PM_ENABLE
+    if (ws2812->pm_lock) {
+        esp_pm_lock_delete(ws2812->pm_lock);
+    }
+#endif
     if (ws2812->rmt_encoder) {
         rmt_del_encoder(ws2812->rmt_encoder);
     }
@@ -402,38 +458,69 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
     STRIP_CHECK(out_buf, "request memory for output buffer failed", err, NULL);
     ws2812->out_buf = out_buf;
 
+    // Calculate required symbols: each LED needs 24 bits (RGB) or 32 bits (RGBW)
+    // Each bit = 1 RMT symbol, plus we need reset symbol
+    uint32_t required_symbols = config->max_leds * bytes_per_pixel * 8 + 1;
+    
     // Configurable memory block size - larger values improve WiFi coexistence
+    // ESP32 (original) has 8 channels with 64 symbols each = 512 total
+    // Using all 512 symbols allows ~21 RGB LEDs to fit entirely in buffer
 #ifdef CONFIG_AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS
     uint32_t mem_block_symbols = CONFIG_AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS;
 #else
-    uint32_t mem_block_symbols = 192;
+    // Default: use maximum available (448 symbols = 7 blocks, leaving 1 for other uses)
+    // This allows best WiFi coexistence for strips up to ~18 RGB LEDs
+    // For longer strips, the ping-pong refill mechanism is used
+    uint32_t mem_block_symbols = 448;
 #endif
 
-    // DMA mode enables hardware-driven transfers that are interrupt-resistant
-#ifdef CONFIG_AVM_NEOPIXEL_USE_DMA
-    bool use_dma = CONFIG_AVM_NEOPIXEL_USE_DMA;
+    // DMA mode is only available on ESP32-S3 and ESP32-C6
+    // For ESP32-WROOM, we rely on larger memory blocks instead
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C6
+    bool use_dma = true;
+    // On DMA-capable chips, we don't need large memory blocks
+    mem_block_symbols = 64;
 #else
-    bool use_dma = true;  // Default to DMA enabled
+    bool use_dma = false;  // Original ESP32 doesn't support RMT DMA
 #endif
+
+#ifdef CONFIG_AVM_NEOPIXEL_USE_DMA
+    use_dma = CONFIG_AVM_NEOPIXEL_USE_DMA && use_dma;  // Only if chip supports it
+#endif
+
+    ESP_LOGI(TAG, "LED strip: %lu LEDs, %d bytes/pixel, requires %lu symbols, using %lu", 
+             (unsigned long)config->max_leds, bytes_per_pixel,
+             (unsigned long)required_symbols, (unsigned long)mem_block_symbols);
 
     rmt_tx_channel_config_t tx_chan_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .gpio_num = (gpio_num_t)config->gpio_num,
         .mem_block_symbols = mem_block_symbols,
         .resolution_hz = 40000000, // 40MHz
-        .trans_queue_depth = 8,    // Increased from 4 for better buffering
+        .trans_queue_depth = 8,    // Larger queue for better buffering
+        .intr_priority = 3,        // Higher priority than WiFi (usually 1-2)
         .flags = {
             .with_dma = use_dma ? 1 : 0,
+            .invert_out = 0,
+            .io_loop_back = 0,
+            .io_od_mode = 0,
         },
     };
     
     esp_err_t chan_err = rmt_new_tx_channel(&tx_chan_config, &ws2812->rmt_chan);
-    if (chan_err != ESP_OK && use_dma) {
-        // Fallback: some ESP32 variants don't support DMA, try without it
-        ESP_LOGW(TAG, "DMA mode failed, falling back to non-DMA mode");
+    if (chan_err != ESP_OK) {
+        // Fallback: try with smaller memory block
+        ESP_LOGW(TAG, "RMT channel creation failed with %lu symbols, trying 64", (unsigned long)mem_block_symbols);
         tx_chan_config.flags.with_dma = 0;
-        tx_chan_config.mem_block_symbols = mem_block_symbols > 128 ? 128 : mem_block_symbols;
+        tx_chan_config.mem_block_symbols = 64;
         chan_err = rmt_new_tx_channel(&tx_chan_config, &ws2812->rmt_chan);
+    }
+    
+    if (chan_err == ESP_OK) {
+        ESP_LOGI(TAG, "RMT channel created: %lu symbols, DMA=%d, intr_priority=%d",
+                 (unsigned long)tx_chan_config.mem_block_symbols, 
+                 tx_chan_config.flags.with_dma,
+                 tx_chan_config.intr_priority);
     }
     STRIP_CHECK(chan_err == ESP_OK, "create RMT TX channel failed", err, NULL);
 
@@ -451,6 +538,16 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
     STRIP_CHECK(rmt_enable(ws2812->rmt_chan) == ESP_OK,
                 "enable RMT TX channel failed", err, NULL);
 
+#ifdef CONFIG_PM_ENABLE
+    // Create PM lock to prevent CPU frequency changes during LED updates
+    // This helps prevent timing issues when WiFi is active
+    esp_err_t pm_err = esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "ws2812", &ws2812->pm_lock);
+    if (pm_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to create PM lock, WiFi may cause flickering");
+        ws2812->pm_lock = NULL;
+    }
+#endif
+
     ws2812->strip_len = config->max_leds;
     ws2812->brightness = config->brightness ? config->brightness : 255;
     ws2812->bytes_per_pixel = bytes_per_pixel;
@@ -467,6 +564,11 @@ led_strip_t *led_strip_new_rmt_ws2812(const led_strip_config_t *config)
 
     return &ws2812->parent;
 err:
+#ifdef CONFIG_PM_ENABLE
+    if (ws2812 && ws2812->pm_lock) {
+        esp_pm_lock_delete(ws2812->pm_lock);
+    }
+#endif
     if (out_buf) {
         free(out_buf);
     }

@@ -8,24 +8,36 @@ config AVM_NEOPIXEL_ENABLE
 
 config AVM_NEOPIXEL_RMT_MEM_BLOCK_SYMBOLS
 	int "RMT memory block symbols"
-	default 192
+	default 448
 	range 64 512
 	depends on AVM_NEOPIXEL_ENABLE
 	help
 		Number of RMT memory block symbols. Larger values improve WiFi
-		coexistence by buffering more data in hardware, reducing sensitivity
-		to interrupt timing. Increase this if you experience LED flickering
-		when WiFi is active. Default is 192, range 64-512.
+		coexistence by buffering more LED data in hardware before the
+		RMT interrupt needs to refill the buffer.
+		
+		For ESP32 (original/WROOM):
+		- 448 symbols (default): Best for WiFi coexistence, uses 7 of 8 RMT blocks
+		- Strips ≤18 RGB LEDs fit entirely in buffer (no refill needed)
+		- Strips ≤14 RGBW LEDs fit entirely in buffer
+		- For 30+ LED strips, the high-priority RMT ISR handles refills
+		
+		For ESP32-S2/S3/C3: 64 is usually sufficient as these have better
+		RMT hardware and/or DMA support.
+		
+		Trade-off: Using more RMT memory blocks means fewer available for
+		other RMT peripherals (IR remote, etc).
 
 config AVM_NEOPIXEL_USE_DMA
-	bool "Use DMA for RMT transfers"
+	bool "Use DMA for RMT transfers (ESP32-S3/C6 only)"
 	default y
 	depends on AVM_NEOPIXEL_ENABLE
+	depends on IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32C6
 	help
 		Enable DMA mode for RMT transfers. DMA mode is more resilient to
 		WiFi interrupts as it offloads data transfer from the CPU.
-		Recommended for systems with WiFi enabled. Some ESP32 variants
-		may not support DMA; the driver will automatically fall back to
-		non-DMA mode if DMA initialization fails.
+		
+		Note: DMA is only available on ESP32-S3 and ESP32-C6.
+		This option has no effect on ESP32 (original), ESP32-S2, or ESP32-C3.
 
 endmenu
