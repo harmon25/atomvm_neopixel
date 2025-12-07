@@ -11,4 +11,35 @@ config AVM_NEOPIXEL_ENABLE
 		- SPI backend fallback for better WiFi coexistence
 		- Maintained by Espressif for optimal performance
 
+choice AVM_NEOPIXEL_BACKEND
+	prompt "LED strip backend"
+	default AVM_NEOPIXEL_BACKEND_AUTO
+	depends on AVM_NEOPIXEL_ENABLE
+	help
+		Select the backend peripheral for driving the LED strip.
+
+config AVM_NEOPIXEL_BACKEND_AUTO
+	bool "Auto (recommended)"
+	help
+		Automatically select the best backend for your chip:
+		- ESP32: SPI with DMA (best WiFi coexistence)
+		- ESP32-S3/C6/P4: RMT with DMA
+		- Others: RMT, fallback to SPI
+
+config AVM_NEOPIXEL_BACKEND_SPI
+	bool "Force SPI"
+	help
+		Always use SPI backend with DMA.
+		Best for WiFi coexistence on all chips.
+		Note: Uses entire SPI bus (SPI2_HOST).
+
+config AVM_NEOPIXEL_BACKEND_RMT
+	bool "Force RMT"
+	help
+		Always use RMT backend.
+		May cause flickering with WiFi on ESP32 (no DMA).
+		Works well on ESP32-S3/C6/P4 with DMA.
+
+endchoice
+
 endmenu

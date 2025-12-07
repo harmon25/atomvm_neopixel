@@ -272,32 +272,29 @@ avm_led_strip_t *avm_led_strip_new(const avm_led_strip_config_t *config)
         .flags.invert_out = false,
     };
     
-    // Try RMT backend first (with DMA on supported chips)
-    led_strip_rmt_config_t rmt_config = {
-        .clk_src = RMT_CLK_SRC_DEFAULT,
-        .resolution_hz = 10 * 1000 * 1000,  // 10MHz
-        .mem_block_symbols = 64,
-        .flags.with_dma = false,
-    };
-    
-    // Enable DMA on chips that support it
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C6
-    rmt_config.flags.with_dma = true;
-    ESP_LOGI(TAG, "Using RMT with DMA");
-#elif CONFIG_IDF_TARGET_ESP32
-    // Original ESP32: use larger memory block for better WiFi coexistence
-    rmt_config.mem_block_symbols = 192;
-    ESP_LOGI(TAG, "Using RMT without DMA (ESP32), mem_block_symbols=%d", (int)rmt_config.mem_block_symbols);
+    esp_err_t ret = ESP_FAIL;
+
+// Helper macros for backend selection
+#if defined(CONFIG_AVM_NEOPIXEL_BACKEND_SPI)
+    #define TRY_SPI_FIRST 1
+    #define TRY_RMT_FIRST 0
+#elif defined(CONFIG_AVM_NEOPIXEL_BACKEND_RMT)
+    #define TRY_SPI_FIRST 0
+    #define TRY_RMT_FIRST 1
 #else
-    ESP_LOGI(TAG, "Using RMT without DMA");
+    // Auto mode: prefer SPI on ESP32 (original), RMT elsewhere
+    #if CONFIG_IDF_TARGET_ESP32
+        #define TRY_SPI_FIRST 1
+        #define TRY_RMT_FIRST 0
+    #else
+        #define TRY_SPI_FIRST 0
+        #define TRY_RMT_FIRST 1
+    #endif
 #endif
-    
-    esp_err_t ret = led_strip_new_rmt_device(&strip_config, &rmt_config, &wrapper->idf_strip);
-    
-    // If RMT fails, try SPI backend (better for WiFi coexistence on all chips)
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "RMT backend failed (err=%d), trying SPI backend", ret);
-        
+
+#if TRY_SPI_FIRST
+    // Try SPI backend first
+    {
         led_strip_spi_config_t spi_config = {
             .spi_bus = SPI2_HOST,
             .flags.with_dma = true,
@@ -307,8 +304,80 @@ avm_led_strip_t *avm_led_strip_new(const avm_led_strip_config_t *config)
         
         if (ret == ESP_OK) {
             ESP_LOGI(TAG, "Using SPI backend with DMA");
+        } else {
+            ESP_LOGW(TAG, "SPI backend failed (err=%d), trying RMT", ret);
         }
     }
+    
+    // Fallback to RMT
+    if (ret != ESP_OK) {
+        led_strip_rmt_config_t rmt_config = {
+            .clk_src = RMT_CLK_SRC_DEFAULT,
+            .resolution_hz = 10 * 1000 * 1000,
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32P4
+            .mem_block_symbols = 64,
+            .flags.with_dma = true,
+#elif CONFIG_IDF_TARGET_ESP32
+            .mem_block_symbols = 192,
+            .flags.with_dma = false,
+#else
+            .mem_block_symbols = 64,
+            .flags.with_dma = false,
+#endif
+        };
+        ret = led_strip_new_rmt_device(&strip_config, &rmt_config, &wrapper->idf_strip);
+        if (ret == ESP_OK) {
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32P4
+            ESP_LOGI(TAG, "Using RMT with DMA");
+#else
+            ESP_LOGW(TAG, "Using RMT without DMA (may flicker with WiFi)");
+#endif
+        }
+    }
+#else // TRY_RMT_FIRST
+    // Try RMT backend first
+    {
+        led_strip_rmt_config_t rmt_config = {
+            .clk_src = RMT_CLK_SRC_DEFAULT,
+            .resolution_hz = 10 * 1000 * 1000,
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32P4
+            .mem_block_symbols = 64,
+            .flags.with_dma = true,
+#elif CONFIG_IDF_TARGET_ESP32
+            .mem_block_symbols = 192,
+            .flags.with_dma = false,
+#else
+            .mem_block_symbols = 64,
+            .flags.with_dma = false,
+#endif
+        };
+        ret = led_strip_new_rmt_device(&strip_config, &rmt_config, &wrapper->idf_strip);
+        if (ret == ESP_OK) {
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32P4
+            ESP_LOGI(TAG, "Using RMT with DMA");
+#else
+            ESP_LOGI(TAG, "Using RMT without DMA");
+#endif
+        } else {
+            ESP_LOGW(TAG, "RMT backend failed (err=%d), trying SPI", ret);
+        }
+    }
+    
+    // Fallback to SPI
+    if (ret != ESP_OK) {
+        led_strip_spi_config_t spi_config = {
+            .spi_bus = SPI2_HOST,
+            .flags.with_dma = true,
+        };
+        ret = led_strip_new_spi_device(&strip_config, &spi_config, &wrapper->idf_strip);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Using SPI backend with DMA");
+        }
+    }
+#endif
+
+#undef TRY_SPI_FIRST
+#undef TRY_RMT_FIRST
     
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to create LED strip: %d", ret);
