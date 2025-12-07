@@ -20,7 +20,7 @@
 
 set(ATOMVM_NEOPIXEL_COMPONENT_SRCS
     "nifs/atomvm_neopixel.c"
-    "nifs/led_strip_rmt_ws2812.c"
+    "nifs/led_strip_driver.c"
 )
 
 # WHOLE_ARCHIVE option is supported only with esp-idf 5.x
@@ -34,7 +34,7 @@ endif()
 idf_component_register(
     SRCS ${ATOMVM_NEOPIXEL_COMPONENT_SRCS}
     INCLUDE_DIRS "nifs/include"
-    PRIV_REQUIRES "libatomvm" "avm_sys" "driver"
+    PRIV_REQUIRES "libatomvm" "avm_sys" "driver" "led_strip"
     ${OPTIONAL_WHOLE_ARCHIVE}
 )
 

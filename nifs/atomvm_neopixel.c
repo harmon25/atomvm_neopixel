@@ -24,7 +24,7 @@
 #include <esp32_sys.h>
 #include <nifs.h>
 #include <term.h>
-#include "led_strip.h"
+#include "atomvm_led_strip.h"
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -71,18 +71,18 @@ static term nif_init(Context *ctx, int argc, term argv[])
     }
 
     // Determine LED type from atom
-    led_strip_type_t led_type = LED_STRIP_RGB;
+    avm_led_strip_type_t led_type = AVM_LED_STRIP_RGB;
     if (globalcontext_is_term_equal_to_atom_string(ctx->global, led_type_term, rgbw_atom)) {
-        led_type = LED_STRIP_RGBW;
+        led_type = AVM_LED_STRIP_RGBW;
     }
 
-    led_strip_config_t strip_config = {
+    avm_led_strip_config_t strip_config = {
         .max_leds = term_to_int(num_pixels),
         .gpio_num = term_to_int(pin),
         .led_type = led_type
     };
     
-    led_strip_t *strip = led_strip_new_rmt_ws2812(&strip_config);
+    avm_led_strip_t *strip = avm_led_strip_new(&strip_config);
     if (!strip) {
         TRACE("Failed to install WS2812 driver.\n");
         term error_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -105,7 +105,7 @@ static term nif_clear(Context *ctx, int argc, term argv[])
     term timeout = argv[1];
     VALIDATE_VALUE(timeout, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     esp_err_t err = strip->clear(strip, term_to_int(timeout));
     if (err != ESP_OK) {
@@ -132,7 +132,7 @@ static term nif_refresh(Context *ctx, int argc, term argv[])
     term timeout = argv[1];
     VALIDATE_VALUE(timeout, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     esp_err_t err = strip->refresh(strip, term_to_int(timeout));
     if (err != ESP_OK) {
@@ -165,7 +165,7 @@ static term nif_set_pixel_rgb(Context *ctx, int argc, term argv[])
     term blue = argv[4];
     VALIDATE_VALUE(blue, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     avm_int_t i = term_to_int(index);
     esp_err_t err = strip->set_pixel(strip, i, term_to_int(red), term_to_int(green), term_to_int(blue));
@@ -199,12 +199,12 @@ static term nif_set_pixel_hsv(Context *ctx, int argc, term argv[])
     term value = argv[4];
     VALIDATE_VALUE(value, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     uint32_t red = 0;
     uint32_t green = 0;
     uint32_t blue = 0;
-    led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
+    avm_led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
 
     avm_int_t i = term_to_int(index);
     esp_err_t err = strip->set_pixel(strip, i, red, green, blue);
@@ -240,12 +240,12 @@ static term nif_set_pixel_hsvw(Context *ctx, int argc, term argv[])
     term white = argv[5];
     VALIDATE_VALUE(white, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     uint32_t red = 0;
     uint32_t green = 0;
     uint32_t blue = 0;
-    led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
+    avm_led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
 
     avm_int_t i = term_to_int(index);
     esp_err_t err = strip->set_pixel_rgbw(strip, i, red, green, blue, term_to_int(white));
@@ -291,7 +291,7 @@ static term nif_set_pixel_rgbw(Context *ctx, int argc, term argv[])
     term white = argv[5];
     VALIDATE_VALUE(white, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     avm_int_t i = term_to_int(index);
     esp_err_t err = strip->set_pixel_rgbw(strip, i, term_to_int(red), term_to_int(green), term_to_int(blue), term_to_int(white));
@@ -329,7 +329,7 @@ static term nif_set_brightness(Context *ctx, int argc, term argv[])
     term brightness = argv[1];
     VALIDATE_VALUE(brightness, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     avm_int_t br = term_to_int(brightness);
     if (br < 0 || br > 255) {
@@ -365,7 +365,7 @@ static term nif_get_brightness(Context *ctx, int argc, term argv[])
     term handle = argv[0];
     VALIDATE_VALUE(handle, term_is_binary);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     uint8_t brightness = strip->get_brightness(strip);
     return term_from_int(brightness);
@@ -387,7 +387,7 @@ static term nif_fill_rgb(Context *ctx, int argc, term argv[])
     term blue = argv[4];
     VALIDATE_VALUE(blue, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
     
     // Use optimized direct buffer fill
     esp_err_t err = strip->fill(strip, term_to_int(red), term_to_int(green), term_to_int(blue));
@@ -423,7 +423,7 @@ static term nif_fill_rgbw(Context *ctx, int argc, term argv[])
     term white = argv[5];
     VALIDATE_VALUE(white, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
     
     // Use optimized direct buffer fill
     esp_err_t err = strip->fill_rgbw(strip, term_to_int(red), term_to_int(green), term_to_int(blue), term_to_int(white));
@@ -467,11 +467,11 @@ static term nif_fill_hsv(Context *ctx, int argc, term argv[])
     term value = argv[4];
     VALIDATE_VALUE(value, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
     
     // Convert HSV to RGB
     uint32_t red = 0, green = 0, blue = 0;
-    led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
+    avm_led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
     
     // Use optimized direct buffer fill with converted RGB values
     esp_err_t err = strip->fill(strip, red, green, blue);
@@ -508,11 +508,11 @@ static term nif_fill_hsvw(Context *ctx, int argc, term argv[])
     term white = argv[5];
     VALIDATE_VALUE(white, term_is_integer);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
     
     // Convert HSV to RGB
     uint32_t red = 0, green = 0, blue = 0;
-    led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
+    avm_led_strip_hsv2rgb(term_to_int(hue), term_to_int(saturation), term_to_int(value), &red, &green, &blue);
     
     // Use optimized direct buffer fill with converted RGB + white values
     esp_err_t err = strip->fill_rgbw(strip, red, green, blue, term_to_int(white));
@@ -553,7 +553,7 @@ static term nif_set_pixels_rgb(Context *ctx, int argc, term argv[])
     term pixel_list = argv[2];
     VALIDATE_VALUE(pixel_list, term_is_list);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
     avm_int_t offset = term_to_int(offset_term);
 
     avm_int_t index = 0;
@@ -617,7 +617,7 @@ static term nif_set_pixels_rgbw(Context *ctx, int argc, term argv[])
     term pixel_list = argv[2];
     VALIDATE_VALUE(pixel_list, term_is_list);
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
     avm_int_t offset = term_to_int(offset_term);
 
     avm_int_t index = 0;
@@ -691,7 +691,7 @@ static term nif_tini(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(channel, term_is_atom);
     // Note: channel argument is kept for API compatibility but ignored in ESP-IDF 5.x
 
-    led_strip_t *strip = (led_strip_t *) binary_to_ptr(handle);
+    avm_led_strip_t *strip = (avm_led_strip_t *) binary_to_ptr(handle);
 
     esp_err_t err = strip->del(strip);
     if (err != ESP_OK) {
