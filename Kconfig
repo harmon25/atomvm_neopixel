@@ -5,5 +5,10 @@ config AVM_NEOPIXEL_ENABLE
 	default y
 	help
 		Use this parameter to enable or disable the AtomVM NEOPIXEL driver.
+		
+		This driver uses the ESP-IDF led_strip component which provides:
+		- Automatic DMA support on ESP32-S3/C6
+		- SPI backend fallback for better WiFi coexistence
+		- Maintained by Espressif for optimal performance
 
 endmenu
