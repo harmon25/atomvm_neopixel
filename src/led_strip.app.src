@@ -1,5 +1,5 @@
-{application, neopixel, [
-    {description, "An OTP library"},
+{application, led_strip, [
+    {description, "AtomVM LED Strip driver for WS2812/SK6812"},
     {vsn, "0.1.0"},
     {registered, []},
     {applications, [

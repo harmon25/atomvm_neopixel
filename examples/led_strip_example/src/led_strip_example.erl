@@ -14,11 +14,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%
--module(neopixel_example).
+-module(led_strip_example).
 
 -export([start/0, demo_fill/0, demo_pattern/0]).
 
--define(NEOPIXEL_PIN, 18).
+-define(LED_STRIP_PIN, 18).
 -define(NUM_PIXELS, 4).
 
 -define(SATURATION, 100).
@@ -26,11 +26,11 @@
 
 %% @doc Main example - rainbow cycle on each pixel
 start() ->
-    {ok, NeoPixel} = neopixel:start(?NEOPIXEL_PIN, ?NUM_PIXELS),
-    ok = neopixel:clear(NeoPixel),
+    {ok, LedStrip} = led_strip:start(?LED_STRIP_PIN, ?NUM_PIXELS),
+    ok = led_strip:clear(LedStrip),
     lists:foreach(
         fun(I) ->
-            spawn(fun() -> loop(NeoPixel, I, 0, 100) end)
+            spawn(fun() -> loop(LedStrip, I, 0, 100) end)
         end,
         lists:seq(0, ?NUM_PIXELS - 1)
     ),
@@ -38,40 +38,40 @@ start() ->
 
 %% @doc Demo: Fill entire strip with solid colors
 demo_fill() ->
-    {ok, NeoPixel} = neopixel:start(?NEOPIXEL_PIN, ?NUM_PIXELS),
-    ok = neopixel:clear(NeoPixel),
+    {ok, LedStrip} = led_strip:start(?LED_STRIP_PIN, ?NUM_PIXELS),
+    ok = led_strip:clear(LedStrip),
     %% Cycle through red, green, blue
-    fill_loop(NeoPixel, [{255, 0, 0}, {0, 255, 0}, {0, 0, 255}]).
+    fill_loop(LedStrip, [{255, 0, 0}, {0, 255, 0}, {0, 0, 255}]).
 
-fill_loop(NeoPixel, []) ->
-    fill_loop(NeoPixel, [{255, 0, 0}, {0, 255, 0}, {0, 0, 255}]);
-fill_loop(NeoPixel, [{R, G, B} | Rest]) ->
-    ok = neopixel:fill_rgb(NeoPixel, R, G, B),
-    ok = neopixel:refresh(NeoPixel),
+fill_loop(LedStrip, []) ->
+    fill_loop(LedStrip, [{255, 0, 0}, {0, 255, 0}, {0, 0, 255}]);
+fill_loop(LedStrip, [{R, G, B} | Rest]) ->
+    ok = led_strip:fill_rgb(LedStrip, R, G, B),
+    ok = led_strip:refresh(LedStrip),
     timer:sleep(1000),
-    fill_loop(NeoPixel, Rest).
+    fill_loop(LedStrip, Rest).
 
 %% @doc Demo: Set multiple pixels with a pattern using set_pixels_rgb
 demo_pattern() ->
-    {ok, NeoPixel} = neopixel:start(?NEOPIXEL_PIN, ?NUM_PIXELS),
-    ok = neopixel:clear(NeoPixel),
+    {ok, LedStrip} = led_strip:start(?LED_STRIP_PIN, ?NUM_PIXELS),
+    ok = led_strip:clear(LedStrip),
     %% Create a rainbow pattern
     Pattern = [{255, 0, 0}, {255, 127, 0}, {0, 255, 0}, {0, 0, 255}],
-    pattern_loop(NeoPixel, Pattern, 0).
+    pattern_loop(LedStrip, Pattern, 0).
 
-pattern_loop(NeoPixel, Pattern, Offset) ->
+pattern_loop(LedStrip, Pattern, Offset) ->
     %% Rotate the pattern by Offset positions
     RotatedPattern = rotate_list(Pattern, Offset),
-    ok = neopixel:set_pixels_rgb(NeoPixel, RotatedPattern),
-    ok = neopixel:refresh(NeoPixel),
+    ok = led_strip:set_pixels_rgb(LedStrip, RotatedPattern),
+    ok = led_strip:refresh(LedStrip),
     timer:sleep(200),
-    pattern_loop(NeoPixel, Pattern, (Offset + 1) rem length(Pattern)).
+    pattern_loop(LedStrip, Pattern, (Offset + 1) rem length(Pattern)).
 
 rotate_list(List, 0) -> List;
 rotate_list([H | T], N) -> rotate_list(T ++ [H], N - 1).
 
-loop(NeoPixel, I, Hue, SleepMs) ->
-    ok = neopixel:set_pixel_hsv(NeoPixel, I, Hue, ?SATURATION, ?VALUE),
-    ok = neopixel:refresh(NeoPixel),
+loop(LedStrip, I, Hue, SleepMs) ->
+    ok = led_strip:set_pixel_hsv(LedStrip, I, Hue, ?SATURATION, ?VALUE),
+    ok = led_strip:refresh(LedStrip),
     timer:sleep(SleepMs),
-    loop(NeoPixel, I, (Hue + 1) rem 360, SleepMs).
+    loop(LedStrip, I, (Hue + 1) rem 360, SleepMs).

@@ -15,9 +15,9 @@
 %% limitations under the License.
 %%
 %%-----------------------------------------------------------------------------
-%% @doc WS2812/SK6812 ("Neopixel") support.
+%% @doc WS2812/SK6812 LED Strip support.
 %%
-%% Use this module to drive a strip of WS2812 or SK6812 "NeoPixel" LED strips.
+%% Use this module to drive a strip of WS2812 or SK6812 LED strips.
 %%
 %% Each LED in a strip is individually addressable and can be configured in
 %% 24-bit color (RGB) or 32-bit color (RGBW for SK6812), using either a 
@@ -34,7 +34,7 @@
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
--module(neopixel).
+-module(led_strip).
 
 -export([
     start/2, start/3, stop/1, clear/1, set_pixel_rgb/5, set_pixel_rgbw/6, set_pixel_hsv/5, 
@@ -50,7 +50,7 @@
 
 -behaviour(gen_server).
 
--type neopixel() :: term().
+-type led_strip() :: term().
 -type pin() :: non_neg_integer().
 -type options() :: map() | proplists:proplist().
 -type channel() :: channel_0 | channel_1 | channel_2 | channel_3.
@@ -75,25 +75,25 @@
 
 
 %%-----------------------------------------------------------------------------
-%% @param   Pin     pin connected to neopixel strip.
+%% @param   Pin     pin connected to LED strip.
 %% @returns ok | {error, Reason}
-%% @doc     Start a neopixel driver.
+%% @doc     Start a LED strip driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(Pin::pin(), NumPixels::non_neg_integer()) -> {ok, neopixel()} | {error, Reason::term()}.
+-spec start(Pin::pin(), NumPixels::non_neg_integer()) -> {ok, led_strip()} | {error, Reason::term()}.
 start(Pin, NumPixels) ->
     start(Pin, NumPixels, maps:new()).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pin         pin connected to neopixel strip
+%% @param   Pin         pin connected to LED strip
 %% @param   Options     extra options
 %% @returns ok | {error, Reason}
-%% @doc     Start a neopixel driver.
+%% @doc     Start a LED strip driver.
 %%
-%% Use the returned reference in subsequent neopixel operations.
+%% Use the returned reference in subsequent LED strip operations.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start(Pin::pin(), NumPixels::non_neg_integer(), Options::options()) -> {ok, neopixel()} | {error, Reason::term()}.
+-spec start(Pin::pin(), NumPixels::non_neg_integer(), Options::options()) -> {ok, led_strip()} | {error, Reason::term()}.
 start(Pin, NumPixels, Options) ->
     NormalizedOpts = normalize_options(Options),
     MergedOpts = maps:merge(?DEFAULT_OPTIONS, NormalizedOpts),
@@ -101,37 +101,37 @@ start(Pin, NumPixels, Options) ->
 
 %%-----------------------------------------------------------------------------
 %% @returns ok
-%% @doc     Stop the specified neopixel driver.
+%% @doc     Stop the specified LED strip driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec stop(Neopixel::neopixel()) -> ok.
-stop(Neopixel) ->
-    gen_server:call(Neopixel, stop).
+-spec stop(LedStrip::led_strip()) -> ok.
+stop(LedStrip) ->
+    gen_server:call(LedStrip, stop).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @returns ok | {error, Reason}
-%% @doc     Clear the neopixel strip.
+%% @doc     Clear the LED strip.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec clear(Neopixel::neopixel()) -> ok | {error, Reason::term()}.
-clear(Neopixel) ->
-    gen_server:call(Neopixel, clear).
+-spec clear(LedStrip::led_strip()) -> ok | {error, Reason::term()}.
+clear(LedStrip) ->
+    gen_server:call(LedStrip, clear).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @returns ok | {error, Reason}
-%% @doc     Refresh the neopixel strip.
+%% @doc     Refresh the LED strip.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec refresh(Neopixel::neopixel()) -> ok | {error, Reason::term()}.
-refresh(Neopixel) ->
-    gen_server:call(Neopixel, refresh).
+-spec refresh(LedStrip::led_strip()) -> ok | {error, Reason::term()}.
+refresh(LedStrip) ->
+    gen_server:call(LedStrip, refresh).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   I               pixel index (`0..NumPixels - 1')
 %% @param   R               Red value (`0..255')
 %% @param   G               Green value (`0..255')
@@ -141,14 +141,14 @@ refresh(Neopixel) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixel_rgb(Neopixel::neopixel(), I::non_neg_integer(), R::color(), G::color(), B::color()) -> ok | {error, Reason::term()}.
-set_pixel_rgb(Neopixel, I, R, G, B) when is_pid(Neopixel), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255 ->
-    gen_server:call(Neopixel, {set_pixel_rgb, I, R, G, B});
-set_pixel_rgb(_Neopixel, _I, _R, _G, _B) ->
+-spec set_pixel_rgb(LedStrip::led_strip(), I::non_neg_integer(), R::color(), G::color(), B::color()) -> ok | {error, Reason::term()}.
+set_pixel_rgb(LedStrip, I, R, G, B) when is_pid(LedStrip), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255 ->
+    gen_server:call(LedStrip, {set_pixel_rgb, I, R, G, B});
+set_pixel_rgb(_LedStrip, _I, _R, _G, _B) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   I               pixel index (`0..NumPixels - 1')
 %% @param   R               Red value (`0..255')
 %% @param   G               Green value (`0..255')
@@ -160,14 +160,14 @@ set_pixel_rgb(_Neopixel, _I, _R, _G, _B) ->
 %% Returns `{error, not_supported}' if called on an RGB strip.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixel_rgbw(Neopixel::neopixel(), I::non_neg_integer(), R::color(), G::color(), B::color(), W::color()) -> ok | {error, Reason::term()}.
-set_pixel_rgbw(Neopixel, I, R, G, B, W) when is_pid(Neopixel), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255, 0 =< W, W =< 255 ->
-    gen_server:call(Neopixel, {set_pixel_rgbw, I, R, G, B, W});
-set_pixel_rgbw(_Neopixel, _I, _R, _G, _B, _W) ->
+-spec set_pixel_rgbw(LedStrip::led_strip(), I::non_neg_integer(), R::color(), G::color(), B::color(), W::color()) -> ok | {error, Reason::term()}.
+set_pixel_rgbw(LedStrip, I, R, G, B, W) when is_pid(LedStrip), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255, 0 =< W, W =< 255 ->
+    gen_server:call(LedStrip, {set_pixel_rgbw, I, R, G, B, W});
+set_pixel_rgbw(_LedStrip, _I, _R, _G, _B, _W) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   I               pixel index (`0..NumPixels - 1')
 %% @param   H               Hue value (`0..359')
 %% @param   S               Saturation value (`0..100')
@@ -177,14 +177,14 @@ set_pixel_rgbw(_Neopixel, _I, _R, _G, _B, _W) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixel_hsv(Neopixel::neopixel(), I::non_neg_integer(), H::hue(), S::saturation(), V::value()) -> ok | {error, Reason::term()}.
-set_pixel_hsv(Neopixel, I, H, S, V) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100 ->
-    gen_server:call(Neopixel, {set_pixel_hsv, I, H, S, V});
-set_pixel_hsv(_Neopixel, _I, _R, _G, _B) ->
+-spec set_pixel_hsv(LedStrip::led_strip(), I::non_neg_integer(), H::hue(), S::saturation(), V::value()) -> ok | {error, Reason::term()}.
+set_pixel_hsv(LedStrip, I, H, S, V) when is_pid(LedStrip), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100 ->
+    gen_server:call(LedStrip, {set_pixel_hsv, I, H, S, V});
+set_pixel_hsv(_LedStrip, _I, _R, _G, _B) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   I               pixel index (`0..NumPixels - 1')
 %% @param   H               Hue value (`0..359')
 %% @param   S               Saturation value (`0..100')
@@ -197,14 +197,14 @@ set_pixel_hsv(_Neopixel, _I, _R, _G, _B) ->
 %% Returns `{error, not_supported}' if called on an RGB strip.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixel_hsvw(Neopixel::neopixel(), I::non_neg_integer(), H::hue(), S::saturation(), V::value(), W::color()) -> ok | {error, Reason::term()}.
-set_pixel_hsvw(Neopixel, I, H, S, V, W) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100, 0 =< W, W =< 255 ->
-    gen_server:call(Neopixel, {set_pixel_hsvw, I, H, S, V, W});
-set_pixel_hsvw(_Neopixel, _I, _H, _S, _V, _W) ->
+-spec set_pixel_hsvw(LedStrip::led_strip(), I::non_neg_integer(), H::hue(), S::saturation(), V::value(), W::color()) -> ok | {error, Reason::term()}.
+set_pixel_hsvw(LedStrip, I, H, S, V, W) when is_pid(LedStrip), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100, 0 =< W, W =< 255 ->
+    gen_server:call(LedStrip, {set_pixel_hsvw, I, H, S, V, W});
+set_pixel_hsvw(_LedStrip, _I, _H, _S, _V, _W) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   Brightness      Brightness value (`0..255')
 %% @returns ok | {error, Reason}
 %% @doc     Set global brightness for the strip.
@@ -214,26 +214,26 @@ set_pixel_hsvw(_Neopixel, _I, _H, _S, _V, _W) ->
 %% Note: You need to call refresh/1 and re-set pixels to see the effect.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_brightness(Neopixel::neopixel(), Brightness::brightness()) -> ok | {error, Reason::term()}.
-set_brightness(Neopixel, Brightness) when is_pid(Neopixel), 0 =< Brightness, Brightness =< 255 ->
-    gen_server:call(Neopixel, {set_brightness, Brightness});
-set_brightness(_Neopixel, _Brightness) ->
+-spec set_brightness(LedStrip::led_strip(), Brightness::brightness()) -> ok | {error, Reason::term()}.
+set_brightness(LedStrip, Brightness) when is_pid(LedStrip), 0 =< Brightness, Brightness =< 255 ->
+    gen_server:call(LedStrip, {set_brightness, Brightness});
+set_brightness(_LedStrip, _Brightness) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @returns Brightness value (`0..255')
 %% @doc     Get current global brightness for the strip.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_brightness(Neopixel::neopixel()) -> brightness().
-get_brightness(Neopixel) when is_pid(Neopixel) ->
-    gen_server:call(Neopixel, get_brightness);
-get_brightness(_Neopixel) ->
+-spec get_brightness(LedStrip::led_strip()) -> brightness().
+get_brightness(LedStrip) when is_pid(LedStrip) ->
+    gen_server:call(LedStrip, get_brightness);
+get_brightness(_LedStrip) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   R               Red value (`0..255')
 %% @param   G               Green value (`0..255')
 %% @param   B               Blue value (`0..255')
@@ -243,14 +243,14 @@ get_brightness(_Neopixel) ->
 %% Sets all pixels to the same color. Call refresh/1 to display.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fill_rgb(Neopixel::neopixel(), R::color(), G::color(), B::color()) -> ok | {error, Reason::term()}.
-fill_rgb(Neopixel, R, G, B) when is_pid(Neopixel), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255 ->
-    gen_server:call(Neopixel, {fill_rgb, R, G, B});
-fill_rgb(_Neopixel, _R, _G, _B) ->
+-spec fill_rgb(LedStrip::led_strip(), R::color(), G::color(), B::color()) -> ok | {error, Reason::term()}.
+fill_rgb(LedStrip, R, G, B) when is_pid(LedStrip), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255 ->
+    gen_server:call(LedStrip, {fill_rgb, R, G, B});
+fill_rgb(_LedStrip, _R, _G, _B) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   R               Red value (`0..255')
 %% @param   G               Green value (`0..255')
 %% @param   B               Blue value (`0..255')
@@ -262,14 +262,14 @@ fill_rgb(_Neopixel, _R, _G, _B) ->
 %% Returns `{error, not_supported}' if called on an RGB strip.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fill_rgbw(Neopixel::neopixel(), R::color(), G::color(), B::color(), W::color()) -> ok | {error, Reason::term()}.
-fill_rgbw(Neopixel, R, G, B, W) when is_pid(Neopixel), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255, 0 =< W, W =< 255 ->
-    gen_server:call(Neopixel, {fill_rgbw, R, G, B, W});
-fill_rgbw(_Neopixel, _R, _G, _B, _W) ->
+-spec fill_rgbw(LedStrip::led_strip(), R::color(), G::color(), B::color(), W::color()) -> ok | {error, Reason::term()}.
+fill_rgbw(LedStrip, R, G, B, W) when is_pid(LedStrip), 0 =< R, R =< 255, 0 =< G, G =< 255, 0 =< B, B =< 255, 0 =< W, W =< 255 ->
+    gen_server:call(LedStrip, {fill_rgbw, R, G, B, W});
+fill_rgbw(_LedStrip, _R, _G, _B, _W) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   H               Hue value (`0..359')
 %% @param   S               Saturation value (`0..100')
 %% @param   V               Value (`0..100')
@@ -280,14 +280,14 @@ fill_rgbw(_Neopixel, _R, _G, _B, _W) ->
 %% Call refresh/1 to display.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fill_hsv(Neopixel::neopixel(), H::hue(), S::saturation(), V::value()) -> ok | {error, Reason::term()}.
-fill_hsv(Neopixel, H, S, V) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100 ->
-    gen_server:call(Neopixel, {fill_hsv, H, S, V});
-fill_hsv(_Neopixel, _H, _S, _V) ->
+-spec fill_hsv(LedStrip::led_strip(), H::hue(), S::saturation(), V::value()) -> ok | {error, Reason::term()}.
+fill_hsv(LedStrip, H, S, V) when is_pid(LedStrip), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100 ->
+    gen_server:call(LedStrip, {fill_hsv, H, S, V});
+fill_hsv(_LedStrip, _H, _S, _V) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   H               Hue value (`0..359')
 %% @param   S               Saturation value (`0..100')
 %% @param   V               Value (`0..100')
@@ -300,14 +300,14 @@ fill_hsv(_Neopixel, _H, _S, _V) ->
 %% Returns `{error, not_supported}' if called on an RGB strip.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fill_hsvw(Neopixel::neopixel(), H::hue(), S::saturation(), V::value(), W::color()) -> ok | {error, Reason::term()}.
-fill_hsvw(Neopixel, H, S, V, W) when is_pid(Neopixel), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100, 0 =< W, W =< 255 ->
-    gen_server:call(Neopixel, {fill_hsvw, H, S, V, W});
-fill_hsvw(_Neopixel, _H, _S, _V, _W) ->
+-spec fill_hsvw(LedStrip::led_strip(), H::hue(), S::saturation(), V::value(), W::color()) -> ok | {error, Reason::term()}.
+fill_hsvw(LedStrip, H, S, V, W) when is_pid(LedStrip), 0 =< H, H < 360, 0 =< S, S =< 100, 0 =< V, V =< 100, 0 =< W, W =< 255 ->
+    gen_server:call(LedStrip, {fill_hsvw, H, S, V, W});
+fill_hsvw(_LedStrip, _H, _S, _V, _W) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   Colors          List of `{R, G, B}' tuples
 %% @returns ok | {error, Reason}
 %% @doc     Set multiple pixels from a list of RGB colors.
@@ -317,12 +317,12 @@ fill_hsvw(_Neopixel, _H, _S, _V, _W) ->
 %% Call refresh/1 to display.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixels_rgb(Neopixel::neopixel(), Colors::[rgb_color()]) -> ok | {error, Reason::term()}.
-set_pixels_rgb(Neopixel, Colors) ->
-    set_pixels_rgb(Neopixel, 0, Colors).
+-spec set_pixels_rgb(LedStrip::led_strip(), Colors::[rgb_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgb(LedStrip, Colors) ->
+    set_pixels_rgb(LedStrip, 0, Colors).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   Offset          Starting pixel index (`0..NumPixels - 1')
 %% @param   Colors          List of `{R, G, B}' tuples
 %% @returns ok | {error, Reason}
@@ -333,14 +333,14 @@ set_pixels_rgb(Neopixel, Colors) ->
 %% Call refresh/1 to display.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixels_rgb(Neopixel::neopixel(), Offset::non_neg_integer(), Colors::[rgb_color()]) -> ok | {error, Reason::term()}.
-set_pixels_rgb(Neopixel, Offset, Colors) when is_pid(Neopixel), is_integer(Offset), Offset >= 0, is_list(Colors) ->
-    gen_server:call(Neopixel, {set_pixels_rgb, Offset, Colors});
-set_pixels_rgb(_Neopixel, _Offset, _Colors) ->
+-spec set_pixels_rgb(LedStrip::led_strip(), Offset::non_neg_integer(), Colors::[rgb_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgb(LedStrip, Offset, Colors) when is_pid(LedStrip), is_integer(Offset), Offset >= 0, is_list(Colors) ->
+    gen_server:call(LedStrip, {set_pixels_rgb, Offset, Colors});
+set_pixels_rgb(_LedStrip, _Offset, _Colors) ->
     throw(badarg).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   Colors          List of `{R, G, B, W}' tuples
 %% @returns ok | {error, Reason}
 %% @doc     Set multiple pixels from a list of RGBW colors (for SK6812 RGBW strips).
@@ -351,12 +351,12 @@ set_pixels_rgb(_Neopixel, _Offset, _Colors) ->
 %% Returns `{error, not_supported}' if called on an RGB strip.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixels_rgbw(Neopixel::neopixel(), Colors::[rgbw_color()]) -> ok | {error, Reason::term()}.
-set_pixels_rgbw(Neopixel, Colors) ->
-    set_pixels_rgbw(Neopixel, 0, Colors).
+-spec set_pixels_rgbw(LedStrip::led_strip(), Colors::[rgbw_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgbw(LedStrip, Colors) ->
+    set_pixels_rgbw(LedStrip, 0, Colors).
 
 %%-----------------------------------------------------------------------------
-%% @param   Neopixel        Neopixel instance
+%% @param   LedStrip        LedStrip instance
 %% @param   Offset          Starting pixel index (`0..NumPixels - 1')
 %% @param   Colors          List of `{R, G, B, W}' tuples
 %% @returns ok | {error, Reason}
@@ -368,10 +368,10 @@ set_pixels_rgbw(Neopixel, Colors) ->
 %% Returns `{error, not_supported}' if called on an RGB strip.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pixels_rgbw(Neopixel::neopixel(), Offset::non_neg_integer(), Colors::[rgbw_color()]) -> ok | {error, Reason::term()}.
-set_pixels_rgbw(Neopixel, Offset, Colors) when is_pid(Neopixel), is_integer(Offset), Offset >= 0, is_list(Colors) ->
-    gen_server:call(Neopixel, {set_pixels_rgbw, Offset, Colors});
-set_pixels_rgbw(_Neopixel, _Offset, _Colors) ->
+-spec set_pixels_rgbw(LedStrip::led_strip(), Offset::non_neg_integer(), Colors::[rgbw_color()]) -> ok | {error, Reason::term()}.
+set_pixels_rgbw(LedStrip, Offset, Colors) when is_pid(LedStrip), is_integer(Offset), Offset >= 0, is_list(Colors) ->
+    gen_server:call(LedStrip, {set_pixels_rgbw, Offset, Colors});
+set_pixels_rgbw(_LedStrip, _Offset, _Colors) ->
     throw(badarg).
 
 %%

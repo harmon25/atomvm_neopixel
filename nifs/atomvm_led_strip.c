@@ -17,7 +17,7 @@
 
 #include <stdlib.h>
 
-#include <atomvm_neopixel.h>
+#include <atomvm_led_strip.h>
 #include <context.h>
 #include <defaultatoms.h>
 #include <esp_log.h>
@@ -29,7 +29,7 @@
 // #define ENABLE_TRACE
 #include "trace.h"
 
-#define TAG "atomvm_neopixel"
+#define TAG "atomvm_led_strip"
 
 static const char *const led_strip_atom = "\x9" "led_strip";
 static const char *const rgbw_atom = "\x4" "rgbw";
@@ -796,75 +796,75 @@ static const struct Nif tini_nif =
 // Component Nif Entrypoints
 //
 
-void atomvm_neopixel_init(GlobalContext *global)
+void atomvm_led_strip_init(GlobalContext *global)
 {
     // no-op
 }
 
-const struct Nif *atomvm_neopixel_get_nif(const char *nifname)
+const struct Nif *atomvm_led_strip_get_nif(const char *nifname)
 {
     TRACE("Locating nif %s ...", nifname);
-    if (strcmp("neopixel:nif_init/4", nifname) == 0) {
+    if (strcmp("led_strip:nif_init/4", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &init_nif;
     }
-    if (strcmp("neopixel:nif_clear/2", nifname) == 0) {
+    if (strcmp("led_strip:nif_clear/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &clear_nif;
     }
-    if (strcmp("neopixel:nif_refresh/2", nifname) == 0) {
+    if (strcmp("led_strip:nif_refresh/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &refresh_nif;
     }
-    if (strcmp("neopixel:nif_set_pixel_rgb/5", nifname) == 0) {
+    if (strcmp("led_strip:nif_set_pixel_rgb/5", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_pixel_rgb_nif;
     }
-    if (strcmp("neopixel:nif_set_pixel_rgbw/6", nifname) == 0) {
+    if (strcmp("led_strip:nif_set_pixel_rgbw/6", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_pixel_rgbw_nif;
     }
-    if (strcmp("neopixel:nif_set_pixel_hsv/5", nifname) == 0) {
+    if (strcmp("led_strip:nif_set_pixel_hsv/5", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_pixel_hsv_nif;
     }
-    if (strcmp("neopixel:nif_set_pixel_hsvw/6", nifname) == 0) {
+    if (strcmp("led_strip:nif_set_pixel_hsvw/6", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_pixel_hsvw_nif;
     }
-    if (strcmp("neopixel:nif_set_brightness/2", nifname) == 0) {
+    if (strcmp("led_strip:nif_set_brightness/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_brightness_nif;
     }
-    if (strcmp("neopixel:nif_get_brightness/1", nifname) == 0) {
+    if (strcmp("led_strip:nif_get_brightness/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &get_brightness_nif;
     }
-    if (strcmp("neopixel:nif_fill_rgb/5", nifname) == 0) {
+    if (strcmp("led_strip:nif_fill_rgb/5", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &fill_rgb_nif;
     }
-    if (strcmp("neopixel:nif_fill_rgbw/6", nifname) == 0) {
+    if (strcmp("led_strip:nif_fill_rgbw/6", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &fill_rgbw_nif;
     }
-    if (strcmp("neopixel:nif_fill_hsv/5", nifname) == 0) {
+    if (strcmp("led_strip:nif_fill_hsv/5", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &fill_hsv_nif;
     }
-    if (strcmp("neopixel:nif_fill_hsvw/6", nifname) == 0) {
+    if (strcmp("led_strip:nif_fill_hsvw/6", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &fill_hsvw_nif;
     }
-    if (strcmp("neopixel:nif_set_pixels_rgb/3", nifname) == 0) {
+    if (strcmp("led_strip:nif_set_pixels_rgb/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_pixels_rgb_nif;
     }
-    if (strcmp("neopixel:nif_set_pixels_rgbw/3", nifname) == 0) {
+    if (strcmp("led_strip:nif_set_pixels_rgbw/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &set_pixels_rgbw_nif;
     }
-    if (strcmp("neopixel:nif_tini/2", nifname) == 0) {
+    if (strcmp("led_strip:nif_tini/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &tini_nif;
     }
@@ -872,6 +872,6 @@ const struct Nif *atomvm_neopixel_get_nif(const char *nifname)
 }
 
 #include <sdkconfig.h>
-#ifdef CONFIG_AVM_NEOPIXEL_ENABLE
-REGISTER_NIF_COLLECTION(atomvm_neopixel, atomvm_neopixel_init, NULL, atomvm_neopixel_get_nif)
+#ifdef CONFIG_AVM_LED_STRIP_ENABLE
+REGISTER_NIF_COLLECTION(atomvm_led_strip, atomvm_led_strip_init, NULL, atomvm_led_strip_get_nif)
 #endif

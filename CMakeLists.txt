@@ -18,8 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-set(ATOMVM_NEOPIXEL_COMPONENT_SRCS
-    "nifs/atomvm_neopixel.c"
+set(ATOMVM_LED_STRIP_COMPONENT_SRCS
+    "nifs/atomvm_led_strip.c"
     "nifs/led_strip_driver.c"
 )
 
@@ -32,7 +32,7 @@ else()
 endif()
 
 idf_component_register(
-    SRCS ${ATOMVM_NEOPIXEL_COMPONENT_SRCS}
+    SRCS ${ATOMVM_LED_STRIP_COMPONENT_SRCS}
     INCLUDE_DIRS "nifs/include"
     PRIV_REQUIRES "libatomvm" "avm_sys" "driver" "led_strip"
     ${OPTIONAL_WHOLE_ARCHIVE}

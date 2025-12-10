@@ -1,24 +1,24 @@
-menu "ATOMVM_NEOPIXEL Configuration"
+menu "ATOMVM_LED_STRIP Configuration"
 
-config AVM_NEOPIXEL_ENABLE
-	bool  "Enable AtomVM NEOPIXEL driver"
+config AVM_LED_STRIP_ENABLE
+	bool  "Enable AtomVM LED_STRIP driver"
 	default y
 	help
-		Use this parameter to enable or disable the AtomVM NEOPIXEL driver.
+		Use this parameter to enable or disable the AtomVM LED_STRIP driver.
 		
 		This driver uses the ESP-IDF led_strip component which provides:
 		- Automatic DMA support on ESP32-S3/C6
 		- SPI backend fallback for better WiFi coexistence
 		- Maintained by Espressif for optimal performance
 
-choice AVM_NEOPIXEL_BACKEND
+choice AVM_LED_STRIP_BACKEND
 	prompt "LED strip backend"
-	default AVM_NEOPIXEL_BACKEND_AUTO
-	depends on AVM_NEOPIXEL_ENABLE
+	default AVM_LED_STRIP_BACKEND_AUTO
+	depends on AVM_LED_STRIP_ENABLE
 	help
 		Select the backend peripheral for driving the LED strip.
 
-config AVM_NEOPIXEL_BACKEND_AUTO
+config AVM_LED_STRIP_BACKEND_AUTO
 	bool "Auto (recommended)"
 	help
 		Automatically select the best backend for your chip:
@@ -26,14 +26,14 @@ config AVM_NEOPIXEL_BACKEND_AUTO
 		- ESP32-S3/C6/P4: RMT with DMA
 		- Others: RMT, fallback to SPI
 
-config AVM_NEOPIXEL_BACKEND_SPI
+config AVM_LED_STRIP_BACKEND_SPI
 	bool "Force SPI"
 	help
 		Always use SPI backend with DMA.
 		Best for WiFi coexistence on all chips.
 		Note: Uses entire SPI bus (SPI2_HOST).
 
-config AVM_NEOPIXEL_BACKEND_RMT
+config AVM_LED_STRIP_BACKEND_RMT
 	bool "Force RMT"
 	help
 		Always use RMT backend.

@@ -275,10 +275,10 @@ avm_led_strip_t *avm_led_strip_new(const avm_led_strip_config_t *config)
     esp_err_t ret = ESP_FAIL;
 
 // Helper macros for backend selection
-#if defined(CONFIG_AVM_NEOPIXEL_BACKEND_SPI)
+#if defined(CONFIG_AVM_LED_STRIP_BACKEND_SPI)
     #define TRY_SPI_FIRST 1
     #define TRY_RMT_FIRST 0
-#elif defined(CONFIG_AVM_NEOPIXEL_BACKEND_RMT)
+#elif defined(CONFIG_AVM_LED_STRIP_BACKEND_RMT)
     #define TRY_SPI_FIRST 0
     #define TRY_RMT_FIRST 1
 #else

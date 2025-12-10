@@ -1,5 +1,5 @@
-{application, neopixel_example, [
-    {description, "An OTP library"},
+{application, led_strip_example, [
+    {description, "AtomVM LED Strip example program"},
     {vsn, "0.1.0"},
     {registered, []},
     {applications, [

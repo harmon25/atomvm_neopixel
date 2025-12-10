@@ -1,8 +1,8 @@
-# AtomVM NeoPixel Example Program
+# AtomVM LED Strip Example Program
 
-The `neopixel_example` program illustrates use of the neopixel API by rotating each pixel through the HSV color space at different rates, making the LED strip slowly morph through different colors.
+The `led_strip_example` program illustrates use of the led_strip API by rotating each pixel through the HSV color space at different rates, making the LED strip slowly morph through different colors.
 
-> Note.  Building and flashing the `neopixel_example` program requires installation of the [`rebar3`](https://www.rebar3.org) Erlang build tool.
+> Note.  Building and flashing the `led_strip_example` program requires installation of the [`rebar3`](https://www.rebar3.org) Erlang build tool.
 
 To run this example program, you will need to connect your ESP32 device to a WS2812 LED strip.  Connect the negative lead on your LED strip to the ground pin on your ESP32, the data lead on your LED strip to pin 18 on your ESP32, and the positive lead on the LED strip to a +5v power source (e.g., on an ESP32 dev board or power supply on the same ground plane as the ESP32).
 
@@ -37,11 +37,11 @@ Attach to the console using the `monitor` Make target in the AtomVM ESP32 build:
     ...
     Found AVM partition: size: 1048576, address: 0x210000
     Booting file mapped at: 0x3f420000, size: 1048576
-    I (243) atomvm_neopixel: eFuse Two Point: NOT supported
-    I (243) atomvm_neopixel: eFuse Vref: Supported
+    I (243) atomvm_led_strip: eFuse Two Point: NOT supported
+    I (243) atomvm_led_strip: eFuse Vref: Supported
     Found AVM partition: size: 1048576, address: 0x110000
-    Starting: neopixel_example.beam...
+    Starting: led_strip_example.beam...
     ---
-    I (779) atomvm_neopixel: Installed WS2812 driver.
+    I (779) atomvm_led_strip: Installed WS2812 driver.
 
 The pixels in your LED strip should start red and gradually change color.
